@@ -34,77 +34,6 @@ def load_project_data():
     return module.get_project_data()
 
 
-# @csrf_exempt
-# def chat_api(request):
-#     if request.method != "POST":
-#         return JsonResponse({"error": "POST only"}, status=405)
-
-#     try:
-#         payload = json.loads(request.body)
-#     except:
-#         return HttpResponseBadRequest("Invalid JSON")
-
-#     query = payload.get("query")
-#     cid = payload.get("conversation_id")
-
-#     if not query:
-#         return JsonResponse({"error": "Missing query"}, status=400)
-
-#     conversation = Conversation.objects.filter(id=cid).first()
-#     user = request.user if request.user.is_authenticated else None
-
-#     result = handle_chat(user, query, conversation)
-#     # project_data = load_project_data()
-#     # result = handle_chat(user, query, conversation, project_data)
-
-
-#     return JsonResponse({
-#         "conversation_id": result["conversation_id"],
-#         "user_message_id": result["user_message_id"],
-#         "bot_message_id": result["bot_message_id"],
-#         "response": result["response"],
-#         "title": result["title"],
-#     })
-
-
-# @csrf_exempt
-# def chat_api(request):
-#     if request.method != "POST":
-#         return JsonResponse({"error": "POST only"}, status=405)
-
-#     try:
-#         payload = json.loads(request.body)
-#     except:
-#         return HttpResponseBadRequest("Invalid JSON")
-
-#     query = payload.get("query")
-#     cid = payload.get("conversation_id")
-#     lang = payload.get("lang", "en") 
-
-#     if not query:
-#         return JsonResponse({"error": "Missing query"}, status=400)
-
-
-#     translated_query = GoogleTranslator(source="auto", target="en").translate(query)
-
-#     conversation = Conversation.objects.filter(id=cid).first()
-#     user = request.user if request.user.is_authenticated else None
-
-#     result = handle_chat(user, translated_query, conversation)
-
-#     translated_response = GoogleTranslator(source="auto", target=lang).translate(result["response"])
-
-#     result["response"] = translated_response
-
-#     return JsonResponse({
-#         "conversation_id": result["conversation_id"],
-#         "user_message_id": result["user_message_id"],
-#         "bot_message_id": result["bot_message_id"],
-#         "response": result["response"],
-#         "title": result["title"],
-#     })
-
-
 @csrf_exempt
 def chat_api(request):
     if request.method != "POST":
@@ -122,19 +51,15 @@ def chat_api(request):
     if not query:
         return JsonResponse({"error": "Missing query"}, status=400)
 
-    # 1) Translate query → English
     translated_query = GoogleTranslator(source="auto", target="en").translate(query)
 
     conversation = Conversation.objects.filter(id=cid).first()
     user = request.user if request.user.is_authenticated else None
 
-    # 2) Load project-specific data dynamically
     project_data = load_project_data()
 
-    # 3) Send data to AI engine
     result = handle_chat(user, translated_query, conversation, project_data)
 
-    # 4) Translate bot answer → selected language
     translated_response = GoogleTranslator(source="auto", target=lang).translate(result["response"])
     result["response"] = translated_response
 
