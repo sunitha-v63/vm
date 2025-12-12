@@ -1,0 +1,137 @@
+{% extends "chatbot/layout.html" %}
+{% load static %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'css/chat.css' %}">
+{% endblock %}
+
+{% block content %}
+<h1 class="Headtitle1">Chatbot<h1>
+<div class="pro-wrapper">
+
+    <div class="pro-left">
+        <img src="{% static 'images/image1.png' %}" class="pro-robot">
+        <p class="pro-caption">Start a conversation with our assistant</p>
+    </div>
+
+    <div class="pro-right">
+
+        <button class="pro-mobile-toggle" onclick="toggleSidebar()">☰ Conversations</button>
+
+        <div class="pro-layout">
+
+            <aside class="pro-sidebar" id="sidebarPanel">
+                <div id="overlay"></div>
+
+
+                <h3 class="pro-sidebar-title">💬 Conversations</h3>
+
+                <div class="pro-search">
+                    <input id="sidebarSearch" onkeyup="filterChats()" placeholder="Search...">
+                </div>
+                <div id="noResults" style="display:none; text-align:center; padding:10px; color:#888;">
+    No conversations found
+</div>
+
+
+                <button class="pro-new-btn" onclick="newChat()">+ New Chat</button>
+
+                <h4 id="pinnedTitle" class="pro-section">📌 Pinned</h4>
+
+                <div id="pinnedList" class="pro-list"></div>
+
+                <h4 id="allTitle" class="pro-section">💬 All Conversations</h4>
+
+                <div id="convList" class="pro-list"></div>
+            </aside>
+
+            <!-- CHAT PANEL -->
+            <main class="pro-chat">
+
+                {% comment %} <div class="pro-chat-header">
+                    <span class="pro-chat-title">Chat Assistant</span>
+                     <div class="pro-chat-actions">
+                    <button class="pro-delete-btn" onclick="enableSingleDeleteMode()">🗑</button>
+                    <button id="voiceToggleBtn" class="pro-voice-btn">🔊</button>
+                     </div>
+                </div> {% endcomment %}
+
+                <div class="pro-chat-header">
+    <span class="pro-chat-title">Chat</span>
+
+    <div class="pro-chat-actions">
+
+        <!-- 🌐 Language Selector -->
+        <select id="langSelect" class="pro-lang-select">
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="ta">Tamil</option>
+            <option value="ml">Malayalam</option>
+        </select>
+
+        <button class="pro-delete-btn" onclick="enableSingleDeleteMode()">🗑</button>
+        <button id="voiceToggleBtn" class="pro-voice-btn">🔊</button>
+        <button class="pro-close-btn" onclick="closeChat()">
+                            <i class="fa fa-times"></i>
+                        </button>
+    </div>
+</div>
+
+
+                <div id="chatBox" class="pro-chat-box"></div>
+
+                <div class="pro-input">
+                    <button id="micBtn" class="pro-mic-btn">🎤</button>
+                     <button id="attachBtn" class="pro-attach-btn">🔗</button>
+                     <input type="file" id="fileInput" hidden>
+                    <input id="messageInput" placeholder="Type a message..." autocomplete="off">
+                    <button id="sendBtn" type="button" onclick="sendMessage()" class="pro-send-btn">➤</button>
+
+                </div>
+
+            </main>
+
+        </div>
+
+        <!-- MODALS (unchanged logic) -->
+        <div id="confirmPopup" class="pro-modal">
+            <div class="pro-modal-box">
+                <p>Delete this conversation?</p>
+                <button class="btn btn-danger" onclick="confirmDelete()">Yes</button>
+                <button class="btn btn-secondary" onclick="cancelDelete()">Cancel</button>
+            </div>
+        </div>
+
+        <div id="renameModal" class="pro-modal">
+            <div class="pro-modal-box">
+                <h4>Rename Conversation</h4>
+                <input id="renameInput">
+                <button class="btn btn-success" onclick="submitRename()">Save</button>
+                <button class="btn btn-secondary" onclick="closeRenameModal()">Cancel</button>
+            </div>
+        </div>
+
+        <div id="singleDeleteModal" class="pro-modal">
+    <div class="pro-modal-box">
+        <p>Delete this message?</p>
+        <button class="btn btn-danger" onclick="confirmSingleDelete()">Yes</button>
+        <button class="btn btn-secondary" onclick="cancelSingleDelete()">Cancel</button>
+    </div>
+</div>
+
+
+        <div id="toastRoot"></div>
+        <audio id="voicePlayer"></audio>
+    </div>
+</div>
+
+{% include "chatbot/bot.html" %}
+
+{% endblock %}
+ {% block js %}
+<script src="{% static 'js/chat.js' %}"></script>
+
+{% endblock %} 
+
+
+

@@ -1,0 +1,73 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Vendor Panel - {% block title %}{% endblock %}</title>
+
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Vendor Dashboard CSS -->
+    <link rel="stylesheet" href="{% static 'vendor/css/vendor.css' %}">
+
+</head>
+
+<body>
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <h2>VetriMart Seller</h2>
+
+        <a href="{% url 'vendor_dashboard' %}">Dashboard</a>
+        <a href="{% url 'vendor_products' %}">My Products</a>
+        <a href="{% url 'add_product' %}">Add Product</a>
+        <a href="{% url 'vendor_orders' %}">Orders</a>
+        <a href="{% url 'vendor_earnings' %}">Earnings</a>
+        <a href="{% url 'vendor_reviews' %}">Reviews</a>
+        <a href="{% url 'vendor_settings' %}">Store Settings</a>
+        <a href="{% url 'logout' %}">Logout</a>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+
+        <!-- TOPBAR -->
+        <div class="topbar d-flex justify-content-between align-items-center">
+            <h3 class="page-title m-0">{% block page_title %}{% endblock %}</h3>
+            <div class="login-info">
+                👤 Logged in as <strong>{{ request.user.username }}</strong>
+            </div>
+        </div>
+
+        <!-- PAGE CONTENT -->
+        <div class="content-wrapper">
+            {% block content %}
+            {% endblock %}
+        </div>
+
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}
+{% endblock %}
+    <script>
+(() => {
+  'use strict';
+  const forms = document.querySelectorAll('.needs-validation');
+  Array.from(forms).forEach(form => {
+    form.addEventListener('submit', event => {
+      if (!form.checkValidity()) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      form.classList.add('was-validated');
+    }, false);
+  });
+})();
+</script>
+
+
+</body>
+</html>

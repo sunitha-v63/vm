@@ -1,0 +1,310 @@
+/* GLOBAL */
+body {
+    background-color: #f4f6f8;
+    margin: 0;
+    font-family: 'Inter', sans-serif;
+}
+
+/* SIDEBAR */
+.sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    width: 250px;
+    /* background-color: #1e293b; */
+    background: linear-gradient(135deg, #5ab892, #589283) !important;
+    padding: 25px 20px;
+}
+
+.sidebar h2 {
+    color: #e1ea62;
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 25px;
+}
+
+.sidebar a {
+    display: block;
+    padding: 12px 10px;
+    margin-bottom: 5px;
+    text-decoration: none;
+    color: #fff;
+    border-radius: 6px;
+    transition: 0.3s;
+    font-size: 15px;
+}
+
+.sidebar a:hover {
+    background-color: #334155;
+    color: #fff;
+    padding-left: 14px;
+}
+
+/* MAIN CONTENT */
+.main-content {
+    margin-left: 260px;
+    padding: 25px;
+}
+
+/* TOPBAR */
+.topbar {
+    background: #ffffff;
+    padding: 18px 25px;
+    border-radius: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    margin-bottom: 25px;
+}
+
+.page-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.login-info {
+    font-size: 15px;
+    font-weight: 500;
+    color: #334155;
+}
+
+/* CONTENT WRAPPER */
+.content-wrapper {
+    margin-top: 10px;
+}
+
+/* CARDS (Dashboard stats) */
+.stat-card {
+    background: #ffffff;
+    padding: 22px;
+    border-radius: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    transition: 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+}
+
+.stat-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #334155;
+}
+
+.stat-value {
+    font-size: 26px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-top: 5px;
+}
+
+/* RECENT ORDERS */
+.recent-card {
+    background: #ffffff;
+    padding: 22px;
+    border-radius: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+/* FORM CONTAINER */
+.form-box {
+    background: #fff;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    max-width: 700px;
+}
+
+.form-label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #334155;
+}
+
+.form-control, 
+.form-select {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
+}
+
+.btn-primary {
+    background: #4f46e5;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+}
+
+.btn-primary:hover {
+    background: #4338ca;
+}
+
+/* IMAGE UPLOAD STYLE */
+.image-upload-box {
+    border: 2px dashed #94a3b8;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    cursor: pointer;
+}
+
+.image-upload-box:hover {
+    background: #f1f5f9;
+}
+.form-box {
+    background: #ffffff;
+    padding: 30px;
+    border-radius: 12px;
+    max-width: 700px;
+    margin: 0 auto;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.form-label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #334155;
+}
+
+.form-control {
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+.btn-primary {
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 16px;
+    background-color: #555659;
+    border: none;
+}
+
+.btn-primary:hover {
+    background-color: #686a6e;
+}
+
+/* Remove default browser style for all form inputs */
+input.form-control,
+textarea.form-control,
+select.form-select {
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+    background-color: #fff !important;
+    box-shadow: none !important;
+    outline: none !important;
+    padding: 10px 12px !important;
+    font-size: 15px !important;
+    color: #333 !important;
+}
+
+/* Remove blue glow on focus */
+input.form-control:focus,
+textarea.form-control:focus,
+select.form-select:focus {
+    border-color: #9ca3af !important;  /* light grey */
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* Placeholder color */
+input::placeholder,
+textarea::placeholder {
+    color: #9ca3af !important;
+}
+
+/* Remove default number input arrows (Chrome) */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none !important;
+    margin: 0 !important;
+}
+
+/* Remove default number arrows (Firefox) */
+/* input[type=number] {
+    -moz-appearance: textfield !important;
+} */
+
+/* Style the entire form box */
+.form-box,
+.card {
+    background: #fff !important;
+    border-radius: 8px !important;
+    border: 1px solid #e5e7eb !important;
+}
+
+/* Container */
+.custom-select-box {
+    position: relative;
+    width: 100%;
+    cursor: pointer;
+    font-size: 15px;
+}
+
+/* Selected area */
+.selected-option {
+    padding: 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #fff;
+    color: #333;
+    user-select: none;
+}
+
+/* Dropdown options */
+.custom-options {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    display: none; /* hide by default */
+    position: absolute;
+    width: 100%;
+    z-index: 999;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+/* Each option */
+.custom-options li {
+    padding: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+    color: #333;
+}
+
+/* Hover styling */
+.custom-options li:hover {
+    background: #f3f4f6;
+}
+
+/* When open */
+.custom-select-box.active .custom-options {
+    display: block;
+}
+
+/* Selected highlight (custom, not blue) */
+.custom-options li.selected {
+    background: #e5e7eb;
+    font-weight: 600;
+}
+
+/* RESPONSIVE */
+@media(max-width: 992px) {
+    .sidebar {
+        position: relative;
+        width: 100%;
+        height: auto;
+    }
+    .main-content {
+        margin-left: 0;
+    }
+}

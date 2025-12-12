@@ -1,0 +1,109 @@
+{% extends 'vendor/vendor_base.html' %}
+{% load static %}
+{% load form_filters %}
+{% block title %}Store Settings{% endblock %}
+{% block page_title %}Store Settings{% endblock %}
+
+{% block content %}
+
+<div class="card shadow-sm border-0 rounded-3 p-4">
+
+    {% if messages %}
+        {% for m in messages %}
+            <div class="alert alert-success">{{ m }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <h4 class="fw-semibold mb-3">Store Details</h4>
+
+    <form method="POST" enctype="multipart/form-data" class="row g-3">
+        {% csrf_token %}
+
+        <!-- Store Name -->
+        <div class="col-md-6">
+            <label class="form-label">Store Name *</label>
+            {{ form.store_name|add_class:"form-control" }}
+            {% if form.store_name.errors %}
+                <small class="text-danger">{{ form.store_name.errors.0 }}</small>
+            {% endif %}
+        </div>
+
+        <!-- Phone -->
+        <div class="col-md-6">
+            <label class="form-label">Phone *</label>
+            {{ form.phone|add_class:"form-control" }}
+            {% if form.phone.errors %}
+                <small class="text-danger">{{ form.phone.errors.0 }}</small>
+            {% endif %}
+        </div>
+
+        <!-- GST Number -->
+        <div class="col-md-6">
+            <label class="form-label">GST Number</label>
+            {{ form.gst_number|add_class:"form-control" }}
+            {% if form.gst_number.errors %}
+                <small class="text-danger">{{ form.gst_number.errors.0 }}</small>
+            {% endif %}
+        </div>
+
+        <!-- Bank Account -->
+        <div class="col-md-6">
+            <label class="form-label">Bank Account</label>
+            {{ form.bank_account|add_class:"form-control" }}
+            {% if form.bank_account.errors %}
+                <small class="text-danger">{{ form.bank_account.errors.0 }}</small>
+            {% endif %}
+        </div>
+
+        <!-- UPI ID -->
+        <div class="col-md-6">
+            <label class="form-label">UPI ID</label>
+            {{ form.upi_id|add_class:"form-control" }}
+            {% if form.upi_id.errors %}
+                <small class="text-danger">{{ form.upi_id.errors.0 }}</small>
+            {% endif %}
+        </div>
+
+        <!-- Address -->
+        <div class="col-md-12">
+            <label class="form-label">Address *</label>
+            {{ form.address|add_class:"form-control" }}
+            {% if form.address.errors %}
+                <small class="text-danger">{{ form.address.errors.0 }}</small>
+            {% endif %}
+        </div>
+
+        <!-- Store Logo -->
+        <div class="col-md-6">
+            <label class="form-label">Store Logo</label>
+            {{ form.logo|add_class:"form-control" }}
+
+            {% if form.instance.logo %}
+            <div class="mt-2">
+                <img src="{{ form.instance.logo.url }}" class="img-thumbnail" width="120">
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Store Banner -->
+        <div class="col-md-6">
+            <label class="form-label">Store Banner</label>
+            {{ form.banner|add_class:"form-control" }}
+
+            {% if form.instance.banner %}
+            <div class="mt-2">
+                <img src="{{ form.instance.banner.url }}" class="img-fluid rounded" width="250">
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Submit -->
+        <div class="col-12 mt-3">
+            <button class="btn btn-primary w-100 py-2">Save Settings</button>
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}

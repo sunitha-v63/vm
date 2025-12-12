@@ -1,0 +1,75 @@
+/* Smooth Fade Animations */
+@keyframes slideLeft {
+  from { opacity: 0; transform: translateX(-40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Apply animations */
+.animate-left {
+  animation: slideLeft 1.1s ease forwards;
+}
+
+.animate-right {
+  animation: slideRight 1.1s ease forwards;
+}
+
+.image-wrapper {
+  overflow: hidden;
+  border-radius: 18px;
+}
+
+.offer-image {
+  border-radius: 18px;
+  transition: 0.4s ease;
+}
+
+.offer-image:hover {
+  transform: scale(1.07);
+}
+
+.discount-yellow {
+  background: linear-gradient(45deg, #ffdd00, #f7971e);
+  box-shadow: 0 4px 12px rgba(255, 183, 28, 0.3);
+}
+
+.content-box {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  padding: 35px;
+  border-radius: 18px;
+  position: relative;
+  transition: 0.3s ease;
+}
+
+.content-box:hover {
+  transform: translateY(-6px);
+}
+
+/* Fancy discount badge */
+.discount-badge {
+  display: inline-block;
+  background: linear-gradient(45deg, #ff8a00, #e52e71);
+  padding: 8px 18px;
+  border-radius: 50px;
+  color: white;
+  font-weight: bold;
+  margin-top: 10px;
+  font-size: 18px;
+  box-shadow: 0 4px 12px rgba(255, 120, 80, 0.3);
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+  .content-box {
+    text-align: center;
+  }
+
+  .discount-badge {
+    margin: 10px auto;
+  }
+}

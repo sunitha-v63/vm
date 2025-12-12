@@ -1,0 +1,150 @@
+{% extends "chatbot/layout.html" %}
+{% load static %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'css/home.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="homepage-container">
+
+  <div class="left-box">
+      <h1 class="title">What is Chatbot?</h1>
+
+      <p class="description text-muted">
+        A chatbot is a robot on your instant messaging application that replaces human-to-human chat with robot-to-human chat.
+        <br>An AI-powered customer support chatbot that uses Machine Learning (ML) and Natural Language Processing (NLP) to understand user queries, generate accurate responses, automate support tasks, and improve customer satisfaction.
+        <br>This improves efficiency, reduces cost, and offers an easy, convenient experience.
+      </p>
+
+      <div class="button-group">
+        <a href="{% url 'chat_page' %}">
+          <button class="btn-start">Start Chat</button>
+        </a>
+        <button id="demoBtn" class="try-demo-btn btn-try">Try Demo</button>
+      </div>
+  </div>
+  <div class="right-box">
+      <img src="{% static 'images/chat1.jpg' %}" class="hero-img" alt="Chatbot Image">
+  </div>
+</div>
+
+
+<section class="py-5">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-6 mb-4 mb-lg-0 text-center">
+                <img src="{% static 'images/speech1.avif' %}" 
+                     alt="Chatbot Illustration" 
+                     class="img-fluid hero-image">
+            </div>
+
+            <div class="col-lg-6">
+
+                <h3 class="fw-bold mb-4 title">Create customer experiences that feel human</h3>
+
+                <div class="feature-item d-flex mb-4">
+                    <div class="feature-icon me-3">
+                        💬
+                    </div>
+                    <div>
+                        <h5 class="fw-semibold mb-1">Engage Instantly</h5>
+                        <p class="text-muted mb-0">
+                            Welcome visitors proactively with smart chatbot greetings to turn browsing into meaningful conversations.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="feature-item d-flex mb-4">
+                    <div class="feature-icon me-3">
+                        ❤️
+                    </div>
+                    <div>
+                        <h5 class="fw-semibold mb-1">Build Personal Connections</h5>
+                        <p class="text-muted mb-0">
+                            Deliver tailored recommendations and helpful answers that guide users smoothly through your site.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="feature-item d-flex mb-4">
+                    <div class="feature-icon me-3">
+                        🎯
+                    </div>
+                    <div>
+                        <h5 class="fw-semibold mb-1">Qualify Leads Effortlessly</h5>
+                        <p class="text-muted mb-0">
+                            Automate FAQs and pre-qualify prospects by gathering the right details before handing off to your team.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="feature-item d-flex">
+                    <div class="feature-icon me-3">
+                        🛒
+                    </div>
+                    <div>
+                        <h5 class="fw-semibold mb-1">Convert More Customers</h5>
+                        <p class="text-muted mb-0">
+                            Let users make purchases, book appointments, or get support instantly with a fast, intuitive chatbot.
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<div id="demoPopup" class="demo-popup hidden">
+    <div class="demo-header">
+        Chat Demo
+        <button onclick="closeDemo()" class="demo-close">✖</button>
+    </div>
+
+    <div id="demoMessages" class="demo-content">
+    </div>
+
+    <p class="demo-note">This is only a demo preview.</p>
+</div>
+
+{% include "chatbot/bot.html" %}
+<script>
+
+const demoTexts = [
+    "Hello! 👋 How can I assist you today?",
+    "Show me what you can do?",
+    "I can answer questions, assist in tasks, and more! "
+];
+
+document.getElementById("demoBtn").onclick = function() {
+
+    const popup = document.getElementById("demoPopup");
+    const messagesBox = document.getElementById("demoMessages");
+
+    popup.classList.add("show");
+    popup.classList.remove("hidden");
+
+    messagesBox.innerHTML = "";
+
+    demoTexts.forEach((msg, index) => {
+        setTimeout(() => {
+            const div = document.createElement("div");
+            div.className = "demo-msg";
+            div.innerText = msg;
+            messagesBox.appendChild(div);
+        }, index * 900); 
+    });
+};
+
+function closeDemo() {
+    const popup = document.getElementById("demoPopup");
+    popup.classList.remove("show");
+    popup.classList.add("hidden");
+}
+
+</script>
+
+
+{% endblock %}

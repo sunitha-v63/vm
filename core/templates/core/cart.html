@@ -1,0 +1,170 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/cart.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<div class="container my-5 cart-container">
+
+    <h2 class="text-center mb-4 fw-bold cartheading">Cart</h2>
+
+    {% if cart_items %}
+    <div class="row">
+        <div class="col-lg-8">
+
+            <div class="cart-list">
+
+                {% for item in cart_items %}
+                <div class="cart-item d-flex align-items-center justify-content-between mb-4 p-3 shadow-sm"
+                     {% if not is_guest %} data-id="{{ item.id }}"{% else %} data-key="{{ item.key }}"{% endif %}>
+
+                    <div class="cart-img-wrap">
+                        {% if is_guest %}
+                            <img src="{{ item.image }}" class="cart-img" alt="{{ item.title }}">
+                        {% else %}
+                            <img src="{{ item.product.image.url }}" class="cart-img" alt="{{ item.product.title }}">
+                        {% endif %}
+                    </div>
+
+
+                    <div class="cart-info flex-grow-1 px-3">
+                        <h5 class="cart-title">
+                            {% if is_guest %}
+                                {{ item.title }}
+                            {% else %}
+                                {{ item.product.title }}
+                            {% endif %}
+                        </h5>
+
+                        <p class="mb-1 text-muted">
+                            {{ item.weight }}
+                        </p>
+
+
+{% if is_guest %}
+    {# Guest User Pricing #}
+    {% if item.offer_price %}
+        <p class="text-success small mb-1">
+            Offer Price: ₹{{ item.offer_price|floatformat:2 }} per {{ item.unit }}
+        </p>
+        <p class="small text-muted" style="text-decoration: line-through;">
+            MRP: ₹{{ item.base_price|floatformat:2 }} per {{ item.unit }}
+        </p>
+    {% else %}
+        <p class="text-dark small mb-1">
+            Price: ₹{{ item.unit_price|floatformat:2 }}
+        </p>
+    {% endif %}
+{% else %}
+    {# Logged-in user pricing #}
+    {% if item.product.is_offer_active %}
+        <p class="text-success small mb-1">
+            Offer Price: ₹{{ item.product.discounted_price|floatformat:2 }} per {{ item.product.unit|upper }}
+        </p>
+        <p class="small text-muted" style="text-decoration: line-through;">
+            MRP: ₹{{ item.product.base_price|floatformat:2 }} per {{ item.product.unit|upper }}
+        </p>
+    {% else %}
+        <p class="text-dark small mb-1">
+            Price: ₹{{ item.unit_price|floatformat:2 }}
+        </p>
+    {% endif %}
+{% endif %}
+                    </div>
+
+                    <div class="qty-controls text-center">
+
+                        {% if is_guest %}
+                            <form method="POST" action="{% url 'update_cart' item.key %}" class="qty-form">
+                        {% else %}
+                            <form method="POST" action="{% url 'update_cart' item.id %}" class="qty-form">
+                        {% endif %}
+                            {% csrf_token %}
+                            <div class="qty-box d-flex align-items-center">
+                               <button type="button" class="qty-btn decrease">−</button>
+
+<input type="number" name="quantity"
+       value="{{ item.quantity }}"
+       min="1"
+       class="qty-input"
+       readonly>
+
+<button type="button" class="qty-btn increase">+</button>
+
+                            </div>
+                        </form>
+
+                        <p class="fw-semibold mt-2 final-price">
+                            ₹{% if is_guest %}{{ item.final_price|floatformat:2 }}{% else %}{{ item.final_price|floatformat:2 }}{% endif %}
+                        </p>
+                    </div>
+
+                    <div class="delete-wrap">
+                        {% if is_guest %}
+                            <a href="{% url 'remove_from_cart_guest' item.key %}" class="text-danger fs-5" aria-label="Remove item">
+                                <i class="bi bi-trash"></i>
+                            </a>
+                        {% else %}
+                            <a href="{% url 'remove_from_cart' item.id %}" class="text-danger fs-5" aria-label="Remove item">
+                                <i class="bi bi-trash"></i>
+                            </a>
+                        {% endif %}
+                    </div>
+
+                </div>
+                {% endfor %}
+
+            </div>
+
+            <a href="{% url 'our_products' %}" class="btn shoppingbtn mt-3">
+                ← Continue Shopping
+            </a>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="summary-box shadow-sm p-4">
+
+                <h4 class="fw-bold mb-3">Price Summary</h4>
+
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Subtotal:</span>
+                    <span id="subtotal">₹{{ subtotal|floatformat:2 }}</span>
+                </div>
+
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Tax (5%):</span>
+                    <span id="tax">₹{{ tax|floatformat:2 }}</span>
+                </div>
+
+                <hr>
+
+                <div class="d-flex justify-content-between fw-bold mb-3">
+                    <span>Total:</span>
+                    <span id="total">₹{{ total|floatformat:2 }}</span>
+                </div>
+
+                <a href="{% url 'payment_page' %}" class="btn checkout-btn w-100 py-2">
+                    Proceed to Checkout
+                </a>
+
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="text-center empty-cart">
+        <h4 class="mt-3">Your cart is empty!</h4>
+        <a href="{% url 'our_products' %}" class="btn startbtn mt-3">Start Shopping</a>
+    </div>
+    {% endif %}
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/cart.js' %}"></script>
+{% endblock %}

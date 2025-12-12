@@ -1,0 +1,329 @@
+{% extends 'core/base.html' %} {% load static %} 
+{% load review_filters %}
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/product_detail.css' %}" />
+{% endblock %} {% block content %}
+<div class="container my-5 product-detail-container">
+  <div class="row g-4">
+
+    <!-- LEFT: Images -->
+    <div class="col-lg-6">
+
+      <div class="main-image-box">
+        <img src="{{ product.image.url }}" class="img-fluid main-image" alt="{{ product.title }}" />
+      </div>
+
+      <div class="thumb-row mt-3">
+        <img src="{{ product.image.url }}" class="thumb-img active-thumb" />
+
+        {% if product.image2 %}
+          <img src="{{ product.image2.url }}" class="thumb-img" />
+        {% endif %}
+
+        {% if product.image3 %}
+          <img src="{{ product.image3.url }}" class="thumb-img" />
+        {% endif %}
+      </div>
+
+    </div>
+
+    <!-- RIGHT: Details -->
+    <div class="col-lg-6">
+
+      <p class="category-text">{{ product.category.name }}</p>
+      <h1 class="product-title">{{ product.title|upper }}</h1>
+
+      <!-- PRICE BOX -->
+      <div class="price-box">
+        <input type="hidden" id="basePrice" value="{{ product.base_price }}" />
+        <input type="hidden" id="discountPrice" value="{{ product.discounted_price }}" />
+        <input type="hidden" id="productUnit" value="{{ product.unit }}" />
+        <input type="hidden" id="isOfferActive" value="{% if product.is_offer_active %}True{% else %}False{% endif %}" />
+        <input type="hidden" id="defaultWeightVal" value="{{ default_weight_val }}" />
+
+        <h2 id="livePrice" class="price-display">
+          {% if product.is_offer_active %}
+            ₹{{ product.discounted_price|floatformat:2 }}
+          {% else %}
+            ₹{{ product.base_price|floatformat:2 }}
+          {% endif %}
+        </h2>
+
+        <small id="livePriceInfo" class="text-muted"></small>
+        <p id="livePriceUnit" class="text-muted mb-0"></p>
+
+        {% if product.is_offer_active %}
+          <p class="text-muted mb-0" style="text-decoration: line-through;">
+            MRP: ₹{{ product.base_price|floatformat:2 }} per {{ product.unit|upper }}
+          </p>
+
+          <p class="text-success fw-semibold mb-1">
+            Offer Price: ₹{{ product.discounted_price|floatformat:2 }} per {{ product.unit|upper }}
+          </p>
+        {% else %}
+          <p class="text-dark fw-semibold mb-1">
+            Price: ₹{{ product.base_price|floatformat:2 }} per {{ product.unit|upper }}
+          </p>
+        {% endif %}
+
+        {% if product.is_offer_active %}
+          <p class="text-success fw-semibold mb-1" id="savingsText">
+            You save ₹{{ product.savings_amount|floatformat:2 }} ({{ product.discount_percent }}% OFF)
+          </p>
+          <small class="text-muted d-none" id="mrpText"></small>
+        {% else %}
+          <p class="text-success fw-semibold mb-1 d-none" id="savingsText"></p>
+          <small class="text-muted d-none" id="mrpText"></small>
+        {% endif %}
+      </div>
+
+      <!-- ADD TO CART FORM -->
+      <form method="POST" action="{% url 'add_to_cart' product.id %}" id="addToCartForm">
+        {% csrf_token %}
+
+        <input type="hidden" id="trueUnitPrice" name="trueUnitPrice" value="">
+        <input type="hidden" id="actionType" name="action_type" value="" />
+
+        <!-- WEIGHT & QTY -->
+        <div class="row g-3 weight-qty-row">
+
+          <!-- WEIGHT -->
+          <div class="col-12 col-md-6">
+            <label class="form-label mb-1">Weight:</label>
+
+            <div class="weight-dropdown-wrapper">
+
+              <div class="selector-box" id="weightSelector" role="button" tabindex="0">
+                <span id="selectedWeightText">{{ weight_options.0 }}</span>
+                <span class="dropdown-arrow">▼</span>
+              </div>
+
+              <ul class="custom-dropdown-list d-none" id="weightDropdown">
+                {% for item in weights_with_values %}
+                  <li data-value="{{ item.label }}" data-val-num="{{ item.value }}">
+                    {{ item.label }}
+                  </li>
+                {% endfor %}
+              </ul>
+
+              <select name="weight" id="selectedWeight" hidden>
+                {% for item in weights_with_values %}
+                  <option value="{{ item.label }}" {% if forloop.first %}selected{% endif %}>
+                    {{ item.label }}
+                  </option>
+                {% endfor %}
+              </select>
+
+            </div>
+          </div>
+
+          <!-- QTY -->
+          <div class="col-12 col-md-6">
+            <label class="form-label mb-1">Qty:</label>
+
+            <div class="qty-box d-flex align-items-center justify-content-between">
+              <button type="button" class="qty-btn minus">−</button>
+
+              <input
+                type="number"
+                id="quantityInput"
+                name="quantity"
+                value="1"
+                min="1"
+                readonly
+                class="qty-input"
+              />
+
+              <button type="button" class="qty-btn plus">+</button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- CART BUTTONS -->
+        <div class="row g-3 mt-4">
+
+          {% if product.stock == 0 %}
+
+            <div class="col-12">
+              <button class="btn btn-secondary w-100" disabled>OUT OF STOCK</button>
+            </div>
+
+          {% else %}
+
+            <div class="col-6">
+              <button
+                type="submit"
+                class="btn btn-outline-dark w-100 action-btn product-buttons"
+                onclick="document.getElementById('actionType').value='add_to_cart'"
+              >
+                ADD TO CART
+              </button>
+            </div>
+
+            <div class="col-6">
+              <button
+                type="submit"
+                class="btn btn-dark w-100 action-btn-dark product-buttons"
+                onclick="document.getElementById('actionType').value='buy_now'"
+              >
+                BUY NOW
+              </button>
+            </div>
+
+          {% endif %}
+
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+</div>
+
+<hr class="my-5">
+
+<div class="container mt-5">
+
+    <h3 class="fw-bold mb-4 customer-heading">Customer Reviews</h3>
+
+    {% if reviews.count == 0 %}
+        <p class="text-muted">No reviews yet. Be the first to review this product!</p>
+    {% endif %}
+
+    {% for r in reviews %}
+        <div class="review-box border rounded p-3 mb-3 shadow-sm">
+
+            <div class="d-flex justify-content-between align-items-center">
+                <strong>{{ r.customer.username }}</strong>
+
+                <span class="text-warning fs-5">
+                    {% for i in "12345" %}
+                        {% if forloop.counter <= r.rating %}
+                            ★
+                        {% else %}
+                            ☆
+                        {% endif %}
+                    {% endfor %}
+                </span>
+            </div>
+
+            <p class="mt-2">{{ r.comment }}</p>
+
+            {% if r.response %}
+                <div class="bg-light p-2 rounded mt-2">
+                    <small class="text-success fw-semibold">
+                        Vendor Reply: {{ r.response }}
+                    </small>
+                </div>
+            {% endif %}
+        </div>
+    {% endfor %}
+
+<div class="mt-4 p-4 border rounded shadow-sm bg-light">
+  {% if not user.is_authenticated %}
+  <p class="text-muted">
+    Please <a href="{% url 'login' %}" class="fw-bold text-success">login</a> to
+    write a review.
+  </p>
+
+  {% elif has_user_reviewed %}
+  <p class="text-success fw-semibold">✔ You already reviewed this product.</p>
+
+  {% elif not user_can_review %}
+  <p class="text-danger fw-semibold">
+    ⭐ Only customers who purchased and received this product can leave a
+    review.
+  </p>
+
+  {% else %}
+  <form method="post" class="mt-3">
+    {% csrf_token %}
+    <input type="hidden" name="add_review" value="1" />
+
+    <label class="form-label fw-semibold">Rating</label>
+    <div class="rating-wrapper">
+      <label class="form-label fw-semibold">Rating</label>
+
+      <div class="rating-display" id="ratingDisplay">★★★★★ — Choose Rating</div>
+
+      <ul class="rating-dropdown d-none" id="ratingDropdown">
+        <li data-value="5">★★★★★ — Excellent</li>
+        <li data-value="4">★★★★☆ — Good</li>
+        <li data-value="3">★★★☆☆ — Average</li>
+        <li data-value="2">★★☆☆☆ — Poor</li>
+        <li data-value="1">★☆☆☆☆ — Very Bad</li>
+      </ul>
+
+      <input type="hidden" name="rating" id="ratingInput" required />
+    </div>
+
+    <label class="form-label fw-semibold">Comment</label>
+    <textarea
+      name="comment"
+      class="form-control mb-3"
+      rows="3"
+      required
+    ></textarea>
+
+    <button class="btn btn-dark w-100">Submit Review</button>
+  </form>
+  {% endif %}
+</div>
+
+
+</div>
+
+
+<div class="container mt-5">
+  <h3 class="text-center mb-4 related-heading animate-title">
+    Related Products
+  </h3>
+
+  <div class="row g-4">
+    {% for prod in related_products %}
+    <div class="col-md-4 col-sm-6">
+      <a
+        href="{{ prod.get_absolute_url }}"
+        class="related-card animate-related"
+      >
+        <div class="related-img-wrap">
+          <img
+            src="{{ prod.image.url }}"
+            class="related-img"
+            alt="{{ prod.title }}"
+          />
+        </div>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %} {% block extra_js %}
+<script src="{% static 'js/product_detail.js' %}"></script>
+<script>
+document.getElementById("ratingDisplay").onclick = function () {
+    document.getElementById("ratingDropdown").classList.toggle("d-none");
+};
+
+document.querySelectorAll("#ratingDropdown li").forEach(item => {
+    item.onclick = function () {
+        let ratingVal = this.dataset.value;
+        let ratingText = this.innerHTML;
+
+        document.getElementById("ratingInput").value = ratingVal;
+        document.getElementById("ratingDisplay").innerHTML = ratingText;
+
+        document.getElementById("ratingDropdown").classList.add("d-none");
+    };
+});
+
+// Close dropdown when clicking outside
+document.addEventListener("click", function (e) {
+    if (!e.target.closest(".rating-wrapper")) {
+        document.getElementById("ratingDropdown").classList.add("d-none");
+    }
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,28 @@
+{% load static %}
+{% block css %}
+<link rel="stylesheet" href="{% static 'css/bot.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="demo-row">
+
+    <div class="demo-col">
+        <h4 class="customer">Customer Support Bot</h4>
+        <div class="demo-box" id="demo1"></div>
+    </div>
+
+    <div class="demo-col">
+        <h4 class="customer">AI Assistant</h4>
+        <div class="demo-box" id="demo2"></div>
+    </div>
+
+    <div class="demo-col">
+        <h4 class="customer">Sales Chatbot</h4>
+        <div class="demo-box" id="demo3"></div>
+    </div>
+
+</div>
+{% endblock %}
+ {% block js %}
+<script src="{% static 'js/bot.js' %}"></script>
+{% endblock %} 

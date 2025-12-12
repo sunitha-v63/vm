@@ -1,0 +1,120 @@
+{% extends 'vendor/vendor_base.html' %}
+{% block title %}Earnings{% endblock %}
+{% block page_title %}Earnings{% endblock %}
+
+{% block content %}
+
+<!-- Earnings Summary -->
+<div class="card shadow-sm border-0 rounded-3 p-4 mb-4">
+
+    <h4 class="mb-3 fw-semibold">Total Earnings Overview</h4>
+
+    <div class="row mb-3">
+        <div class="col-md-4">
+            <div class="p-3 border rounded bg-light">
+                <p class="text-muted mb-1">Total Sales</p>
+                <h5 class="fw-bold text-success">₹{{ total_sales }}</h5>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="p-3 border rounded bg-light">
+                <p class="text-muted mb-1">Admin Commission</p>
+                <h5 class="fw-bold text-danger">₹{{ commission }}</h5>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="p-3 border rounded bg-light">
+                <p class="text-muted mb-1">Your Earnings</p>
+                <h5 class="fw-bold text-primary">₹{{ vendor_amount }}</h5>
+            </div>
+        </div>
+    </div>
+
+    <hr class="mt-4">
+
+    <!-- Request Payout Section -->
+    <h5 class="fw-semibold mt-3">Request Payout</h5>
+
+    <form method="POST" action="{% url 'vendor_request_payout' %}" class="row g-3 mt-2">
+        {% csrf_token %}
+
+        <div class="col-md-4">
+            <input type="number"
+                   name="amount"
+                   step="0.01"
+                   class="form-control"
+                   placeholder="Enter amount"
+                   required>
+        </div>
+
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-primary w-100">Request</button>
+        </div>
+    </form>
+
+</div>
+
+<!-- Payout History -->
+<div class="card shadow-sm border-0 rounded-3 p-4">
+
+    <h4 class="fw-semibold mb-3">Payout History</h4>
+
+    <table class="table table-hover align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>ID</th>
+                <th>Amount</th>
+                <th>Commission</th>
+                <th>Status</th>
+                <th>Requested At</th>
+                <th>Paid At</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for p in payouts %}
+            <tr>
+                <td class="fw-semibold">#{{ p.id }}</td>
+                <td>₹{{ p.amount }}</td>
+                <td>₹{{ p.admin_commission }}</td>
+
+                <td>
+                    {% if p.status == 'pending' %}
+                        <span class="badge bg-warning text-dark">Pending</span>
+                    {% elif p.status == 'approved' %}
+                        <span class="badge bg-info text-dark">Approved</span>
+                    {% elif p.status == 'paid' %}
+                        <span class="badge bg-success">Paid</span>
+                    {% elif p.status == 'rejected' %}
+                        <span class="badge bg-danger">Rejected</span>
+                    {% else %}
+                        <span class="badge bg-secondary text-dark">{{ p.status }}</span>
+                    {% endif %}
+                </td>
+
+                <td>{{ p.requested_at|date:"Y-m-d H:i" }}</td>
+
+                <td>
+                    {% if p.paid_at %}
+                        {{ p.paid_at|date:"Y-m-d H:i" }}
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+
+            {% empty %}
+            <tr>
+                <td colspan="6" class="text-center text-muted py-4">
+                    No payout history found.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</div>
+
+{% endblock %}

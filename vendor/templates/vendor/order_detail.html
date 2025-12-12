@@ -1,0 +1,31 @@
+{% extends 'vendor/vendor_base.html' %}
+{% block title %}Order #{{ order.id }}{% endblock %}
+{% block page_title %}Order #{{ order.id }}{% endblock %}
+{% block content %}
+<div class="card">
+  <p><strong>Customer:</strong> {{ order.customer.email }}</p>
+  <p><strong>Address:</strong> {{ order.address }}</p>
+  <p><strong>Status:</strong> {{ order.get_status_display }}</p>
+
+  <h4>Items</h4>
+  <ul>
+    {% for item in order.items.all %}
+      <li>{{ item.product.name }} x {{ item.qty }} — ₹{{ item.price }}</li>
+    {% endfor %}
+  </ul>
+
+  <form method="post">
+    {% csrf_token %}
+    {% if order.status == 'new' %}
+      <button name="action" value="accept">Accept</button>
+    {% endif %}
+    {% if order.status in 'accepted' %}
+      <button name="action" value="pack">Mark Packed</button>
+      <button name="action" value="ship">Mark Shipped</button>
+      <input type="text" name="tracking_id" placeholder="Tracking ID">
+    {% endif %}
+    <button name="action" value="deliver">Mark Delivered</button>
+    <button name="action" value="cancel">Cancel</button>
+  </form>
+</div>
+{% endblock %}

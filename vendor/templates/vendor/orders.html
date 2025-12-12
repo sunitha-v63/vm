@@ -1,0 +1,70 @@
+{% extends 'vendor/vendor_base.html' %}
+{% block title %}Orders{% endblock %}
+{% block page_title %}Orders{% endblock %}
+
+{% block content %}
+
+<div class="card shadow-sm border-0 rounded-3 p-4">
+
+    <table class="table table-hover align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>Order ID</th>
+                <th>Customer</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th class="text-center">Action</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for o in orders %}
+            <tr>
+                <td class="fw-semibold">#{{ o.id }}</td>
+
+                <td>
+                    {{ o.email }}<br>
+                    <small class="text-muted">{{ o.full_name }}</small>
+                </td>
+
+                <td class="fw-semibold">₹{{ o.total_amount }}</td>
+
+                <td>
+                    {% if o.status == "pending" %}
+                        <span class="badge bg-warning text-dark">Pending</span>
+                    {% elif o.status == "confirmed" %}
+                        <span class="badge bg-info text-dark">Confirmed</span>
+                    {% elif o.status == "processing" %}
+                        <span class="badge bg-secondary">Processing</span>
+                    {% elif o.status == "out_for_delivery" %}
+                        <span class="badge bg-dark">Out for Delivery</span>
+                    {% elif o.status == "delivered" %}
+                        <span class="badge bg-success">Delivered</span>
+                    {% elif o.status == "cancelled" %}
+                        <span class="badge bg-danger">Cancelled</span>
+                    {% else %}
+                        <span class="badge bg-dark">Other</span>
+                    {% endif %}
+                </td>
+
+                <td class="text-center">
+                    <a href="{% url 'vendor_order_detail' o.pk %}" 
+                       class="btn btn-sm btn-outline-secondary">
+                        View
+                    </a>
+                </td>
+            </tr>
+
+            {% empty %}
+            <tr>
+                <td colspan="5" class="text-center text-muted py-4">
+                    No orders found
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+
+    </table>
+</div>
+
+{% endblock %}

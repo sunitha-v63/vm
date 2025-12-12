@@ -1,0 +1,89 @@
+{% extends 'vendor/vendor_base.html' %}
+{% block title %}Reviews{% endblock %}
+{% block page_title %}Product Reviews{% endblock %}
+
+{% block content %}
+
+<div class="card shadow-sm border-0 rounded-3 p-4">
+
+    <h4 class="fw-semibold mb-3">Customer Reviews</h4>
+
+    <table class="table table-hover align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>Product</th>
+                <th>Customer</th>
+                <th>Rating</th>
+                <th>Comment</th>
+                <th>Your Response</th>
+                <th class="text-center">Action</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for r in reviews %}
+            <tr>
+
+                <!-- Product -->
+                <td class="fw-semibold">
+                    {{ r.product.title }}
+                </td>
+
+                <!-- Customer -->
+                <td>{{ r.customer.email }}</td>
+
+                <!-- Rating -->
+                <td>
+                    <span class="badge bg-warning text-dark px-3 py-2">
+                        {{ r.rating }} ★
+                    </span>
+                </td>
+
+                <!-- Comment -->
+                <td style="max-width: 280px;">
+                    {{ r.comment }}
+                </td>
+
+                <!-- Vendor Response -->
+                <td>
+                    {% if r.response %}
+                        <span class="text-success fw-semibold">{{ r.response }}</span>
+                    {% else %}
+                        <span class="text-muted">No response yet</span>
+                    {% endif %}
+                </td>
+
+                <!-- Reply Form -->
+                <td class="text-center">
+                    <form method="POST" class="d-flex align-items-center justify-content-center gap-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="review_id" value="{{ r.id }}">
+
+                        <input type="text"
+                               name="response"
+                               placeholder="Type reply..."
+                               class="form-control form-control-sm"
+                               style="width: 170px;"
+                               required>
+
+                        <button type="submit" class="btn btn-sm btn-primary px-3">
+                            Reply
+                        </button>
+                    </form>
+                </td>
+
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" class="text-center text-muted py-4">
+                    No reviews yet.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+
+    </table>
+
+</div>
+
+{% endblock %}

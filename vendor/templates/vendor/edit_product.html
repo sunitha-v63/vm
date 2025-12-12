@@ -1,0 +1,109 @@
+{% extends 'vendor/vendor_base.html' %}
+{% block title %}Edit Product{% endblock %}
+{% block page_title %}Edit Product{% endblock %}
+
+{% block content %}
+
+<div class="card shadow-sm border-0 rounded-3 p-4">
+
+    <!-- Message if approved -->
+    {% if product.status == 'approved' %}
+    <div class="alert alert-info">
+        This product is approved. You can only update <strong>Price, Stock, and Image</strong>.
+    </div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" class="row g-3">
+        {% csrf_token %}
+
+        <!-- Title -->
+        <div class="col-md-6">
+            <label class="form-label">Product Title</label>
+            <input type="text" name="title" value="{{ product.title }}"
+                   class="form-control"
+                   {% if product.status == 'approved' %}disabled{% endif %}>
+        </div>
+
+        <!-- Category -->
+        <div class="col-md-6">
+            <label class="form-label">Category</label>
+            <select name="category" class="form-select"
+                    {% if product.status == 'approved' %}disabled{% endif %}>
+                {% for c in categories %}
+                <option value="{{ c.id }}" {% if product.category.id == c.id %}selected{% endif %}>
+                    {{ c.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Price -->
+        <div class="col-md-4">
+            <label class="form-label">Price (₹)</label>
+            <input type="number" step="0.01"
+                   name="base_price"
+                   value="{{ product.base_price }}"
+                   class="form-control">
+        </div>
+
+        <!-- Stock -->
+        <div class="col-md-4">
+            <label class="form-label">Stock</label>
+            <input type="number" min="0"
+                   name="stock"
+                   value="{{ product.stock }}"
+                   class="form-control">
+        </div>
+
+        <!-- Unit -->
+        <div class="col-md-4">
+            <label class="form-label">Unit</label>
+            <select name="unit" class="form-select"
+                    {% if product.status == 'approved' %}disabled{% endif %}>
+                {% for value, label in product.UNIT_CHOICES %}
+                <option value="{{ value }}" {% if product.unit == value %}selected{% endif %}>
+                    {{ label }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Weight Options -->
+        <div class="col-12">
+            <label class="form-label">Weight Options</label>
+            <input type="text" name="weight_options"
+                   value="{{ product.weight_options }}"
+                   class="form-control"
+                   {% if product.status == 'approved' %}disabled{% endif %}>
+        </div>
+
+        <!-- Description -->
+        <div class="col-12">
+            <label class="form-label">Description</label>
+            <textarea name="description" rows="4" class="form-control"
+                      {% if product.status == 'approved' %}disabled{% endif %}>{{ product.description }}</textarea>
+        </div>
+
+        <!-- Current Image -->
+        <div class="col-md-4">
+            <label class="form-label d-block">Current Image</label>
+            <img src="{{ product.image.url }}" style="height:120px;width:120px;object-fit:cover;border-radius:6px;">
+        </div>
+
+        <!-- New Image -->
+        <div class="col-md-8">
+            <label class="form-label">Upload New Image</label>
+            <input type="file" name="image" class="form-control">
+        </div>
+
+        <!-- Save Button -->
+        <div class="col-12 mt-3">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{% url 'vendor_products' %}" class="btn btn-secondary ms-2">Cancel</a>
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}

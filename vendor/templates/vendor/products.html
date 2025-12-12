@@ -1,0 +1,98 @@
+{% extends 'vendor/vendor_base.html' %}
+{% block title %}My Products{% endblock %}
+{% block page_title %}My Products{% endblock %}
+
+{% block content %}
+
+<div class="mb-3">
+    <a href="{% url 'add_product' %}" class="btn btn-secondary btn-sm">+ Add Product</a>
+</div>
+
+<div class="card shadow-sm border-0 rounded-3 p-3">
+    <table class="table table-hover align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>Image</th>
+                <th>Name</th>
+                <th>Price</th>
+                <th>Stock</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+
+        <tbody>
+        {% for product in products %}
+            <tr>
+
+                <!-- Image -->
+                <td>
+                    <img src="{{ product.image.url }}"
+                         style="height:60px;width:60px;object-fit:cover;border-radius:8px;">
+                </td>
+
+                <!-- Name -->
+                <td class="fw-semibold">
+                    {{ product.title }}
+                </td>
+
+                <!-- Price -->
+                <td>₹{{ product.base_price }}</td>
+
+                <!-- Stock -->
+                <td>
+                    {% if product.stock == 0 %}
+                        <span class="badge bg-danger">Out of Stock</span>
+                    {% elif product.stock < 5 %}
+                        <span class="badge bg-warning text-dark">{{ product.stock }} (Low)</span>
+                    {% else %}
+                        <span class="badge bg-success">{{ product.stock }}</span>
+                    {% endif %}
+                </td>
+
+                <!-- Status -->
+                <td>
+                    {% if product.status == 'approved' %}
+                        <span class="badge bg-success">Approved</span>
+
+                    {% elif product.status == 'pending' %}
+                        <span class="badge bg-warning text-dark">Pending</span>
+
+                    {% else %}
+                        <span class="badge bg-danger">Rejected</span>
+
+                        {% if product.rejection_reason %}
+                            <br>
+                            <small class="text-muted">
+                                Reason: {{ product.rejection_reason }}
+                            </small>
+                        {% endif %}
+                    {% endif %}
+                </td>
+<td>
+    <a href="{% url 'edit_product' product.id %}" 
+       class="btn btn-sm btn-outline-dark me-2">
+        Edit
+    </a>
+
+    <a href="{% url 'delete_product' product.id %}"
+       class="btn btn-sm btn-outline-danger">
+        Delete
+    </a>
+</td>
+
+
+            </tr>
+
+        {% empty %}
+            <tr>
+                <td colspan="6" class="text-center text-muted py-4">
+                    No products found.
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
