@@ -20,6 +20,8 @@ def get_project_data(user=None):
     for p in Product.objects.all():
         title = p.title.lower()
         category = p.category.name.lower()
+        
+        print("🔥 DEBUG: get_project_data() LOADED")
 
         products.append({
             "id": p.id,
@@ -34,12 +36,11 @@ def get_project_data(user=None):
             "stock": p.stock,
             "url": p.get_absolute_url(),
 
- 
+            "image": p.image.url if p.image else None,
+            
             "search_terms": [
                 title,
                 title.replace(" ", ""),
-                category,
-                category.replace(" ", ""),
             ]
         })
 

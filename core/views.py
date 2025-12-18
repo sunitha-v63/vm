@@ -2163,10 +2163,6 @@ def update_guest_cart_qty(request):
         "total": f"{total:.2f}",
     })
 
-import random
-from django.core.mail import send_mail
-from django.contrib.auth.hashers import make_password
-
 def forgot_password(request):
     list(messages.get_messages(request))
 
@@ -2182,69 +2178,41 @@ def forgot_password(request):
                 messages.error(request, "❌ This email is not registered.")
                 return redirect("forgot_password")
 
-            otp = random.randint(100000, 999999)
-
             request.session["reset_user_id"] = user.id
-            request.session["otp"] = otp
 
-            send_mail(
-                subject="Your Password Reset OTP",
-                message=f"Your OTP for password reset is: {otp}",
-                from_email="sumisunitha06@gmail.com",  
-                recipient_list=[email],
-                fail_silently=False
-            )
-
-            messages.success(request, "✔ OTP sent to your email.")
-            return redirect("verify_otp")
+            return redirect("reset_password")
 
     else:
         form = ForgotPasswordForm()
 
     return render(request, "core/forgot_password.html", {"form": form})
 
-def verify_otp(request):
-
-    if "reset_user_id" not in request.session:
-        return redirect("forgot_password")
-
-    if request.method == "POST":
-        entered_otp = request.POST.get("otp")
-
-        if str(request.session.get("otp")) == str(entered_otp):
-            request.session.pop("otp", None)
-            return redirect("reset_password")
-        else:
-            messages.error(request, "❌ Incorrect OTP. Try again.")
-
-    return render(request, "core/verify_otp.html")
+from django.contrib.auth.hashers import make_password
 
 def reset_password(request):
 
-    if "reset_user_id" not in request.session or "otp" in request.session:
+    user_id = request.session.get("reset_user_id")
+
+    if not user_id:
         return redirect("forgot_password")
 
-    try:
-        user = CustomUser.objects.get(id=request.session["reset_user_id"])
-    except CustomUser.DoesNotExist:
-        messages.error(request, "User not found.")
-        return redirect("forgot_password")
+    user = CustomUser.objects.get(id=user_id)
 
     if request.method == "POST":
-        form = ResetPasswordForm(request.POST)
+        password = request.POST.get("password")
+        confirm_password = request.POST.get("confirm_password")
 
-        if form.is_valid():
-            new_password = form.cleaned_data["new_password"]
+        if password != confirm_password:
+            messages.error(request, "❌ Passwords do not match.")
+            return redirect("reset_password")
 
-            user.password = make_password(new_password)
-            user.save()
+        user.password = make_password(password)
+        user.save()
 
-            request.session.pop("reset_user_id", None)
+        del request.session["reset_user_id"]
 
-            messages.success(request, "✔ Password reset successfully! Please login.")
-            return redirect("login")
+        messages.success(request, "✔ Password reset successful.")
+        return redirect("login")
 
-    else:
-        form = ResetPasswordForm()
+    return render(request, "core/reset_password.html")
 
-    return render(request, "core/reset_password.html", {"form": form})

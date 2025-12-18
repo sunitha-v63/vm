@@ -22,8 +22,7 @@ input:hover {
     box-shadow: none !important;
 }
 body {
-    /* background: linear-gradient(135deg, #e9eff9, #f4f7fc); */
-      font-family: "PT Serif", serif;
+      font-family: "Open Sans", sans-serif;
 }
 
 .custom-navbar {

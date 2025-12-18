@@ -73,7 +73,6 @@ urlpatterns = [
     path('payment-info/', views.payment_info, name='payment_info'),
     path('quality-info/', views.quality_info, name='quality_info'),
     path("forgot-password/",views.forgot_password, name="forgot_password"),
-    path("verify-otp/", views.verify_otp, name="verify_otp"),
     path("reset-password/",views.reset_password, name="reset_password"),
     path("update-cart-qty/<int:item_id>/<int:qty>/", views.update_cart_qty, name="update_cart_qty"),
     path("update-guest-cart/", views.update_guest_cart_qty, name="update_guest_cart"),

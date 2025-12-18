@@ -1,870 +1,756 @@
-import requests
-import difflib
 import re
+import requests
 from django.conf import settings
-from .models import Conversation, Message
-from .utils import format_prompt
 from core.models import Order
-from difflib import SequenceMatcher
-import logging
-
-logger = logging.getLogger(__name__)
+from .models import Conversation, Message
 
 HF_HEADERS = {
     "Authorization": f"Bearer {settings.HF_API_KEY}",
-    "Accept": "application/json",
     "Content-Type": "application/json",
 }
 
-def is_grocery_context(query):
-    q = query.lower()
+STOPWORDS = {
+    "what","is","are","the","in","of","and","to","me",
+    "show","tell","please","any"
+}
 
-    grocery_keywords = [
-        "fruit", "fruits",
-        "vegetable", "veggies",
-        "milk", "dairy",
-        "meat", "fish", "chicken", "mutton",
-        "grocery", "food", "snack"
+STORE_KEYWORDS = {
+    "price","cost","buy","order","delivery",
+    "cart","wishlist","offer","discount","available"
+}
+
+GREETINGS = {
+    "morning": [
+        "good morning", "gm", "morning"
+    ],
+    "afternoon": [
+        "good afternoon", "good noon"
+    ],
+    "evening": [
+        "good evening", "evening"
+    ],
+    "night": [
+        "good night", "gn"
+    ],
+    "general": [
+        "hi", "hello", "hey", "hai", "hii", "hola"
+    ]
+}
+
+MEANINGLESS_WORDS = {"a", "an", "the"}
+
+def normalize(text):
+    if not text:
+        return ""
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9\s]", "", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+def clean_query(q):
+    return " ".join(w for w in normalize(q).split() if w not in STOPWORDS)
+
+def fix_article(text):
+    return re.sub(r"\b(a)\s+([aeiou])", r"an \2", text)
+
+def is_meaningless_input(query):
+    q = normalize(query)
+    return q in MEANINGLESS_WORDS or len(q) == 1
+
+from difflib import SequenceMatcher
+
+def match_product(query, products, threshold=0.75):
+    q = normalize(query)
+    best, score = None, 0
+
+    for p in products:
+        title = normalize(p.get("title", ""))
+
+        if q == title or q in title:
+            return p
+
+        r = SequenceMatcher(None, q, title).ratio()
+        if r > score:
+            best, score = p, r
+
+    return best if score >= threshold else None
+
+
+def match_category(query, categories):
+    q = normalize(query)
+
+    for c in categories:
+        name = normalize(c.get("name", ""))
+        if q == name or q.rstrip("s") == name.rstrip("s"):
+            return name
+
+    for c in categories:
+        name = normalize(c.get("name", ""))
+        if q in name or name in q:
+            return name
+
+    return None
+
+def related_products(category, products, limit=6):
+    items = [
+        p for p in products
+        if p.get("category", "").lower() == category.lower()
     ]
 
-    # Only return True if any grocery keyword exists
-    return any(word in q for word in grocery_keywords)
+    items.sort(key=lambda x: (
+        x.get("stock", 0) <= 0,     
+        not x.get("is_offer", False),  
+        -x.get("rating", 0)
+    ))
+
+    return items[:limit]
 
 
-def hf_generate(prompt, max_tokens=200, system_prompt=None, timeout=20):
-    """
-    Call HF chat completions endpoint. Returns text or raises/returns fallback.
-    """
-    sys_msg = system_prompt or "Answer using the project data. If unsure, say you don’t know."
+def hf_generate(prompt, max_tokens=60):
     try:
-        resp = requests.post(
+        res = requests.post(
             "https://router.huggingface.co/v1/chat/completions",
             headers=HF_HEADERS,
             json={
                 "model": settings.HF_MODEL,
-                "messages": [
-                    {"role": "system", "content": sys_msg},
-                    {"role": "user", "content": prompt}
-                ],
+                "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": max_tokens,
             },
-            timeout=timeout
+            timeout=15
         )
-        data = resp.json()
-        return data["choices"][0]["message"]["content"]
-    except Exception as e:
-        logger.exception("HF generate error")
-        return "I'm having trouble fetching info right now."
-
-
-# -----------------------
-# Helpers: matching & fuzzy
-# -----------------------
-def levenshtein_distance(a, b):
-    if a is None or b is None:
-        return max(len(a or ""), len(b or ""))
-    a = a.lower()
-    b = b.lower()
-    if len(a) < len(b):
-        a, b = b, a
-    if len(b) == 0:
-        return len(a)
-    previous = list(range(len(b) + 1))
-    for i, ca in enumerate(a):
-        current = [i + 1]
-        for j, cb in enumerate(b):
-            insertions = previous[j + 1] + 1
-            deletions = current[j] + 1
-            substitutions = previous[j] + (0 if ca == cb else 1)
-            current.append(min(insertions, deletions, substitutions))
-        previous = current
-    return previous[-1]
-
-
-def smart_match_products(query, project_data, threshold=0.58):
-    """
-    Fuzzy search across product search_terms and title_lower.
-    Returns list of matched product dicts (best-first).
-    """
-    if not query:
-        return []
-    q = query.lower().strip().replace(" ", "")
-    scores = []
-    for p in project_data.get("products", []):
-        best = 0.0
-        # check defined search_terms (if present)
-        for term in p.get("search_terms", []) + [p.get("title_lower", "")]:
-            if not term:
-                continue
-            t = term.lower().strip().replace(" ", "")
-            # exact-ish checks
-            if q == t or q in t or t in q:
-                best = max(best, 1.0)
-                break
-            # sequence matcher similarity
-            ratio = SequenceMatcher(None, q, t).ratio()
-            best = max(best, ratio)
-        if best >= threshold:
-            scores.append((p, best))
-    scores.sort(key=lambda x: x[1], reverse=True)
-    return [p for p, s in scores]
-
-
-def advanced_product_match(query, products, top=5):
-    q = query.lower()
-    scores = []
-    for p in products:
-        title = p.get("title_lower", "")
-        ratio = difflib.SequenceMatcher(None, q, title).ratio()
-        if q in title or title in q or ratio >= 0.5:
-            scores.append((p, max(ratio, 0.5 if q in title else ratio)))
-    scores.sort(key=lambda x: x[1], reverse=True)
-    return [p for p, s in scores[:top]]
-
-
-# -----------------------
-# Intent detection helpers
-# -----------------------
-def classify_query_ai(query):
-    q = query.lower()
-    product_keywords = [
-        "price", "offer", "discount", "cost", "kg", "g", "gram", "piece", "ml", "litre",
-        "stock", "available", "product", "buy", "order", "cart", "delivery", "slot",
-        "fruit", "vegetable", "grocery", "snack", "vetrimart"
-    ]
-    if any(word in q for word in product_keywords):
-        return "vetrimart"
-
-    categories = {
-        "movie": ["movie", "film", "actor", "hero", "cinema"],
-        "travel": ["travel", "trip", "tour", "hotel"],
-        "food": ["recipe", "cook", "dish", "taste"]
-    }
-    for cat, words in categories.items():
-        if any(w in q for w in words):
-            return cat
-    return "general"
-
-
-def is_offer_query(query):
-    offer_keywords = ["offer", "discount", "sale", "deal", "special price", "today offer"]
-    q = query.lower()
-    return any(word in q for word in offer_keywords)
-
-
-def extract_price_filter(query):
-    match = re.search(r"(under|below|less than)\s+(\d+)", query.lower())
-    if match:
-        return int(match.group(2))
-    return None
-
-
-def is_cart_query(query):
-    q = query.lower()
-    cart_keywords = [
-        "cart", "my cart", "items in cart", "what is in my cart",
-        "show my cart", "cart items", "tell me my cart"
-    ]
-    return any(k in q for k in cart_keywords)
-
-
-def is_wishlist_query(query):
-    q = query.lower()
-    wishlist_keywords = [
-        "wishlist", "my wishlist", "wish list", "items in wishlist",
-        "what is in my wishlist", "show my wishlist"
-    ]
-    return any(k in q for k in wishlist_keywords)
-
-
-# -----------------------
-# Category detection (DB first, AI fallback)
-# -----------------------
-def ai_guess_category(product_name):
-    prompt = f"""
-    Classify this item into ONE shopping category:
-    fruit, vegetable, dairy, meat, beverages, snacks, grocery, other.
-
-    Item: "{product_name}"
-    
-    Return only the category name.
-    """
-
-    try:
-        res = hf_generate(prompt)  # ✅ FIXED (remove max_tokens)
-        cat = res.strip().lower()
-
-        mapping = {
-            "fruits": "fruit",
-            "fruit": "fruit",
-            "vegetables": "vegetable",
-            "vegetable": "vegetable",
-            "dairy": "dairy",
-            "milk": "dairy",
-            "meat": "meat",
-            "fish": "meat",
-            "snack": "snacks",
-            "snacks": "snacks",
-            "beverages": "beverages",
-            "beverage": "beverages",
-            "grocery": "grocery",
-            "other": "other"
-        }
-
-        return mapping.get(cat, cat)
-
+        return res.json()["choices"][0]["message"]["content"]
     except Exception:
-        return None
+        return ""
 
-
-
-def detect_category_from_query(query, project_data):
-    """
-    DB-first category detection:
-    1) match product titles/search_terms -> product.category
-    2) match category names in project_data
-    3) fuzzy match product titles (levenshtein / sequence)
-    4) AI fallback
-    """
-    q = (query or "").lower().strip()
-
-    # 1) direct product title / search_terms match
-    for p in project_data.get("products", []):
-        title = p.get("title", "") or ""
-        title_low = p.get("title_lower", title.lower())
-        # exact contains checks
-        if title_low and (title_low in q or q in title_low):
-            return p.get("category")
-        for term in p.get("search_terms", []):
-            t = (term or "").lower().replace(" ", "")
-            if t and (t in q.replace(" ", "") or q.replace(" ", "") in t):
-                return p.get("category")
-
-    # 2) category name match
-    for c in project_data.get("categories", []):
-        cname = (c.get("name") or "").lower()
-        if cname and cname in q:
-            return cname
-
-    # 3) fuzzy match product titles
-    best = None
-    best_score = 0.0
-    for p in project_data.get("products", []):
-        t = (p.get("title_lower") or p.get("title", "")).lower().replace(" ", "")
-        if not t:
-            continue
-        seq_ratio = SequenceMatcher(None, q.replace(" ", ""), t).ratio()
-        lev = levenshtein_distance(q.replace(" ", ""), t)
-        # compute combined heuristic
-        score = seq_ratio - (lev * 0.02)
-        if score > best_score:
-            best_score = score
-            best = p
-    if best_score >= 0.5 and best:
-        return best.get("category")
-
-    # 4) AI fallback
-    ai_cat = ai_guess_category(query)
-    return ai_cat
-
-
-# -----------------------
-# Reply formatting helpers
-# -----------------------
-def format_short_reply(text, query, category):
-    import re
-    clean = (text or "").replace("\n", " ").strip()
-    unknown_phrases = [
-        "i don't have", "i do not have", "i’m not sure",
-        "i don't know", "no information", "cannot answer", "unknown"
-    ]
-    fallback_product = "Looks like I couldn’t locate that item — want to see similar choices?"
-    fallback_general = "I may not have exact information, but here are some helpful resources."
-
-    if any(p in clean.lower() for p in unknown_phrases):
-        short = fallback_product if category == "vetrimart" else fallback_general
-    else:
-        sentences = re.split(r'(?<=[.!?])\s+', clean)
-        short = " ".join(sentences[:2]).strip()
-        if len(short) < 3:
-            short = fallback_product if category == "vetrimart" else fallback_general
-
-    q = query.replace(" ", "+")
-    google = f'<a href="https://www.google.com/search?q={q}" target="_blank">Google</a>'
-    images = f'<a href="https://www.google.com/search?tbm=isch&q={q}" target="_blank">Images</a>'
-    youtube = f'<a href="https://www.youtube.com/results?search_query={q}" target="_blank">YouTube</a>'
-
-    if category == "movie":
-        imdb = f'<a href="https://www.imdb.com/find?q={q}" target="_blank">IMDb</a>'
-        return f"{short}<br><br>More: {google} | {images} | {youtube} | {imdb}"
-
-    if category == "travel":
-        maps = f'<a href="https://www.google.com/maps/search/{q}" target="_blank">Maps</a>'
-        hotels = f'<a href="https://www.booking.com/searchresults.html?ss={q}" target="_blank">Hotels</a>'
-        return f"{short}<br><br>Explore: {google} | {images} | {youtube} | {maps} | {hotels}"
-
-    if category == "food":
-        recipe = f'<a href="https://www.sanjeevkapoor.com/RecipeSearch.aspx?search={query}" target="_blank">Recipe</a>'
-        return f"{short}<br><br>Explore: {google} | {images} | {youtube} | {recipe}"
-
-    if category == "vetrimart":
-        return short
-
-    return f"{short}<br><br>Explore: {google} | {images} | {youtube}"
-
-
-def auto_emoji(query):
-    prompt = f"Return ONLY ONE EMOJI for this text: {query}. No words."
-    emoji = hf_generate(prompt, max_tokens=8)
-    return (emoji or "").strip()[:4]
-
-
-def clean_query(q):
-    remove_words = ["what", "wht", "is", "in", "are", "the", "any", "tell", "me", "show", "please"]
-    words = (q or "").lower().split()
-    return " ".join([w for w in words if w not in remove_words])
-
-
-CATEGORY_BENEFITS = {
-    "fruit": "Fruits are rich in vitamins, improve immunity, and support digestion.",
-    "vegetable": "Vegetables are high in fiber and essential nutrients for overall health.",
-    "nuts": "Nuts contain healthy fats, boost brain function, and support heart health.",
-    "dairy": "Dairy provides calcium, protein, and strengthens bones.",
-    "meat": "Meat is rich in protein and essential minerals for muscle growth.",
-    "fish": "Fish is high in omega-3 and supports heart and brain health.",
-}
-
-PRODUCT_BENEFITS = {
-    "milk": "Milk is rich in calcium and strengthens bones.",
-    "apple": "Apples are high in fiber, improve digestion, and support immunity.",
-    "banana": "Bananas give instant energy and are rich in potassium.",
-    "carrot": "Carrots boost eye health, improve skin glow, and are rich in Vitamin A.",
-    "nuts": "Nuts contain healthy fats and support brain & heart health.",
-}
-
-
-def generate_ai_benefits(product_name):
-    prompt = (
-        f"Give a short friendly description of health benefits or uses of '{product_name}'. "
-        "Return only 1–2 sentences."
+def product_benefit(name):
+    return hf_generate(
+        f"Give 1 short health benefit of {name}.",
+        max_tokens=40
     )
-    text = hf_generate(prompt, max_tokens=60)
-    return (text or "").strip()
 
-
-def save_bot(conversation, user_msg, answer):
-    bot_msg = Message.objects.create(
+def save_bot(conversation, user_msg, reply):
+    bot = Message.objects.create(
         conversation=conversation,
         sender="bot",
-        content=answer
+        content=fix_article(reply)
     )
     return {
         "conversation_id": conversation.id,
         "user_message_id": user_msg.id,
-        "bot_message_id": bot_msg.id,
-        "response": answer,
+        "bot_message_id": bot.id,
+        "response": bot.content,
         "title": conversation.title,
     }
 
+def get_category_url(category_name, categories):
+    for c in categories:
+        if normalize(c.get("name")) == normalize(category_name):
+            return c.get("url")
+    return "#"
 
-# -----------------------
-# Main handler (final)
-# -----------------------
-# def handle_chat(user, query, conversation=None, project_data=None):
-#     # Create or reuse conversation
-#     if conversation is None:
-#         conversation = Conversation.objects.create(user=user)
+def get_offer_products(products, category=None, product_name=None, limit=6):
+    items = []
 
-#     if conversation.title == "New Chat":
-#         conversation.title = query[:30] + "..." if len(query) > 30 else query
-#         conversation.save()
+    for p in products:
+        if not p.get("is_offer"):
+            continue
 
-#     # Save user message
-#     user_msg = Message.objects.create(
-#         conversation=conversation,
-#         sender="user",
-#         content=query
-#     )
+        if product_name and normalize(product_name) not in normalize(p.get("title", "")):
+            continue
 
-#     # If project data available, prefer project-specific answers
-#     if project_data:
-#         raw_q = (query or "").lower()
-#         clean_q = clean_query(raw_q)
+        if category and normalize(p.get("category")) != normalize(category):
+            continue
 
-#         # 1) CART intent — handled first to avoid false product matches
-#         if is_cart_query(raw_q):
-#             if user and getattr(user, "is_authenticated", False):
-#                 cart_items = user.cart_items.select_related("product")
-#                 if not cart_items.exists():
-#                     answer = "Your cart is empty 🛒"
-#                 else:
-#                     answer = "<b>Your cart items:</b><br>"
-#                     for item in cart_items:
-#                         prod = item.product
-#                         answer += (
-#                             f"• <a href='{prod.get_absolute_url()}' target='_blank'>{prod.title}</a>"
-#                             f" × {item.quantity}<br>"
-#                         )
-#             else:
-#                 answer = "Please log in to view your cart 😊"
-#             return save_bot(conversation, user_msg, answer)
+        items.append(p)
 
-#         # 2) WISHLIST intent
-#         if is_wishlist_query(raw_q):
-#             if user and getattr(user, "is_authenticated", False):
-#                 wish_items = user.wishlist.all()
-#                 if not wish_items.exists():
-#                     answer = "Your wishlist is empty ⭐"
-#                 else:
-#                     answer = "<b>Your wishlist items:</b><br>"
-#                     for product in wish_items:
-#                         answer += (
-#                             f"• <a href='{product.get_absolute_url()}' target='_blank'>{product.title}</a><br>"
-#                         )
-#             else:
-#                 answer = "Please log in to view your wishlist 😊"
-#             return save_bot(conversation, user_msg, answer)
+    items.sort(key=lambda x: (
+        x.get("stock", 0) <= 0,
+        -x.get("discount_percent", 0)
+    ))
 
-#         # 3) Smart matching (products)
-#         matched_products = smart_match_products(clean_q, project_data)
-        
-#         if not matched_products and not is_grocery_context(raw_q):
-#             raw_answer = hf_generate(query)
-#             category = classify_query_ai(query)
-#             answer = format_short_reply(raw_answer, query, category)
-#             emoji = auto_emoji(query)
-#             answer = answer + " " + emoji
-#             return save_bot(conversation, user_msg, answer)
+    return items[:limit]
 
-#         # 3b) build matched_offers safely
-#         offers_list = project_data.get("offers", [])
-#         matched_offers = [
-#             o for o in offers_list
-#             if any(
-#                 (o.get("title_lower") or "").lower() == (p.get("title_lower") or "").lower()
-#                 for p in matched_products
-#             )
-#         ]
+def is_offer_query(query):
+    q = normalize(query)
+    return "offer" in q or "discount" in q or "sale" in q
 
-#         # 4) PRICE query — show primary product price + benefits + link + related suggestions
-#         if "price" in raw_q and matched_products:
-#             main = matched_products[0]
-#             benefit_text = None
+def is_cart_query(query):
+    q = normalize(query)
+    return any(
+        k in q for k in [
+            "cart", "my cart", "show cart",
+            "what in my cart", "items in cart"
+        ]
+    )
 
-#             # product-level manual benefit
-#             pname = (main.get("title") or "").lower()
-#             for key, val in PRODUCT_BENEFITS.items():
-#                 if key in pname:
-#                     benefit_text = val
-#                     break
+def is_wishlist_query(query):
+    q = normalize(query)
+    return any(
+        k in q for k in [
+            "wishlist", "wish list", "my wishlist",
+            "show wishlist", "items in wishlist"
+        ]
+    )
+    
+def is_payment_query(query):
+    q = normalize(query)
+    return any(
+        k in q for k in [
+            "payment", "razorpay", "transaction",
+            "payment status", "payment id"
+        ]
+    )
 
-#             # category-level benefit
-#             if not benefit_text:
-#                 cat = (main.get("category") or "").lower()
-#                 for key, val in CATEGORY_BENEFITS.items():
-#                     if key in cat:
-#                         benefit_text = val
-#                         break
+def is_tracking_query(query):
+    q = normalize(query)
+    return any(
+        k in q for k in [
+            "track order", "where is my order",
+            "order location", "delivery status"
+        ]
+    )
 
-#             # AI fallback
-#             if not benefit_text:
-#                 benefit_text = generate_ai_benefits(main.get("title", ""))
+def is_availability_query(query):
+    q = normalize(query)
+    return any(
+        k in q for k in [
+            "available", "in stock", "stock",
+            "out of stock", "availability"
+        ]
+    )
 
-#             answer = (
-#                 f"The price of <b>{main.get('title')}</b> is ₹{main.get('base_price')}."
-#                 f"<br>🛒 <a href='{main.get('url')}' target='_blank'>View Product</a>"
-#             )
+def extract_order_id(query):
+    q = query.lower()
+    match = re.search(r"order\s*(id)?\s*[:#]?\s*(\d+)", q)
+    if match:
+        return int(match.group(2))
 
-#             if benefit_text:
-#                 answer += f"<br><br>🌿 <b>Benefits:</b> {benefit_text}"
+    return None
 
-#             # related (same category) suggestions
-#             related = [p for p in matched_products[1:10] if p.get("category") == main.get("category")]
-#             if related:
-#                 answer += "<br><br><b>You may also like:</b><br>"
-#                 for p in related:
-#                     answer += (
-#                         f"• <a href='{p.get('url')}' target='_blank'>{p.get('title')}</a>"
-#                         f" — ₹{p.get('base_price')}<br>"
-#                     )
+# --------related_products
 
-#             return save_bot(conversation, user_msg, answer)
+def looks_like_grocery_word(query):
+    q = query.strip()
 
-#         # 5) OFFER query — if user asks about offers (general or product-specific)
-#         if "offer" in raw_q or "discount" in raw_q or is_offer_query(raw_q):
-#             # if user typed product words, use matched_offers (product-specific)
-#             if matched_offers:
-#                 answer = "<b>Available Offers:</b><br>"
-#                 for o in matched_offers:
-#                     answer += (
-#                         f"• <a href='{o.get('url')}' target='_blank'>{o.get('title')}</a>"
-#                         f" — {o.get('discount_percent')}% off<br>"
-#                     )
-#                 return save_bot(conversation, user_msg, answer)
+    if not q.isalpha():
+        return False
 
-#             # Category-level detection if product not matched
-#             guessed_cat = detect_category_from_query(clean_q, project_data)
-#             if guessed_cat:
-#                 cat_offers = [
-#                     o for o in offers_list
-#                     if any((p.get("category") or "").lower() == guessed_cat.lower() for p in project_data.get("products", []))
-#                 ]
-#                 if cat_offers:
-#                     answer = f"<b>Offers in {guessed_cat.title()}:</b><br>"
-#                     for o in cat_offers:
-#                         answer += (
-#                             f"• <a href='{o.get('url')}' target='_blank'>{o.get('title')}</a>"
-#                             f" — {o.get('discount_percent')}% off<br>"
-#                         )
-#                     return save_bot(conversation, user_msg, answer)
+    if q[0].isupper():
+        return False
 
-#             # fallback: show all offers
-#             if offers_list:
-#                 answer = "<b>Latest Offers:</b><br>"
-#                 for o in offers_list:
-#                     answer += (
-#                         f"• <a href='{o.get('url')}' target='_blank'>{o.get('title')}</a>"
-#                         f" — {o.get('discount_percent')}% off<br>"
-#                     )
-#             else:
-#                 answer = "No offers available right now. 😊"
-#             return save_bot(conversation, user_msg, answer)
+    if len(q) > 20:
+        return False
 
-#         # 6) BENEFITS-only query: if user asks about product benefits/uses
-#         if any(word in raw_q for word in ["benefit", "benefits", "use", "uses", "help", "good for", "healthy"]):
-#             if matched_products:
-#                 main = matched_products[0]
-#                 product_name = (main.get("title") or "").lower()
-#                 category_name = (main.get("category") or "").lower()
+    return True
 
-#                 # product-level manual benefit
-#                 benefit_text = next((v for k, v in PRODUCT_BENEFITS.items() if k in product_name), None)
+def build_category_vocabulary(products):
+    """
+    Builds a map like:
+    {
+      "fruits": {"apple", "orange", "grapes"},
+      "vegetables": {"beans", "spinach"},
+      ...
+    }
+    """
+    vocab = {}
 
-#                 # category-level benefit
-#                 if not benefit_text:
-#                     benefit_text = next((v for k, v in CATEGORY_BENEFITS.items() if k in category_name), None)
+    for p in products:
+        cat = p.get("category")
+        title = normalize(p.get("title"))
 
-#                 # AI fallback
-#                 if not benefit_text:
-#                     benefit_text = generate_ai_benefits(main.get("title", ""))
+        if not cat or not title:
+            continue
 
-#                 answer = f"<b>{main.get('title')}</b><br>🌿 {benefit_text}"
+        vocab.setdefault(cat, set()).add(title)
 
-#                 # show related same-category suggestions as well
-#                 related = [p for p in matched_products[1:10] if p.get("category") == main.get("category")]
-#                 if related:
-#                     answer += "<br><br><b>You may also like:</b><br>"
-#                     for p in related:
-#                         answer += (
-#                             f"• <a href='{p.get('url')}' target='_blank'>{p.get('title')}</a>"
-#                             f" — ₹{p.get('base_price')}<br>"
-#                         )
+    return vocab
 
-#                 return save_bot(conversation, user_msg, answer)
+def infer_category_for_missing_product(query, products):
+    q = normalize(query)
 
-#         # 7) If products matched -> show main + related (same category) + benefits
-#         if matched_products:
-#             main = matched_products[0]
+    if not looks_like_grocery_word(q):
+        return None
 
-#             # Benefits (prefer product → category → AI)
-#             benefit_text = next((v for k, v in PRODUCT_BENEFITS.items() if k in main.get("title", "").lower()), None)
-#             if not benefit_text:
-#                 benefit_text = next((v for k, v in CATEGORY_BENEFITS.items() if k in main.get("category", "").lower()), None)
-#             if not benefit_text:
-#                 benefit_text = generate_ai_benefits(main.get("title", ""))
+    category_vocab = build_category_vocabulary(products)
 
-#             answer = (
-#                 f"<b>{main.get('title')}</b> — ₹{main.get('base_price')}<br>"
-#                 f"🛒 <a href='{main.get('url')}' target='_blank'>View Product</a><br><br>"
-#             )
+    for category, words in category_vocab.items():
+        for w in words:
+            if q in w or w in q:
+                return category
 
-#             if benefit_text:
-#                 answer += f"🌿 {benefit_text}<br><br>"
+    return None
 
-#             # RELATED — only same-category products
-#             related = [p for p in matched_products[1:10] if p.get("category") == main.get("category")]
-#             if related:
-#                 answer += "<b>You may also like:</b><br>"
-#                 for p in related:
-#                     answer += (
-#                         f"• <a href='{p.get('url')}' target='_blank'>{p.get('title')}</a>"
-#                         f" — ₹{p.get('base_price')}<br>"
-#                     )
 
-#             return save_bot(conversation, user_msg, answer)
+def ai_guess_category(word, categories):
+    category_list = ", ".join(c.get("name") for c in categories)
 
-#         # 8) No matched products -> try category fallback and suggest items
-#         guessed_cat = detect_category_from_query(clean_q, project_data)
-#         if guessed_cat:
-#             same_cat = [p for p in project_data.get("products", []) if (p.get("category") or "").lower() == guessed_cat.lower()]
-#             if same_cat:
-#                 answer = (
-#                     f"We don’t currently sell <b>{query}</b>, but we have similar <b>{guessed_cat.title()}</b> items:<br><br>"
-#                 )
-#                 for p in same_cat[:8]:
-#                     answer += f"• <a href='{p.get('url')}' target='_blank'>{p.get('title')}</a> — ₹{p.get('base_price')}<br>"
-#                 return save_bot(conversation, user_msg, answer)
+    prompt = (
+        f"Choose the most suitable category from this list ONLY:\n"
+        f"{category_list}\n\n"
+        f"Word: {word}\n\n"
+        f"Rules:\n"
+        f"- Return ONLY ONE category name from the list\n"
+        f"- If not related to grocery or shopping, return 'none'\n"
+        f"- Do not explain\n"
+    )
 
-#     # FALLBACK: general AI response (non project-specific)
-#     raw_answer = hf_generate(query)
-#     category = classify_query_ai(query)
-#     answer = format_short_reply(raw_answer, query, category)
+    result = hf_generate(prompt, max_tokens=10).lower().strip()
 
-#     emoji = auto_emoji(query)
-#     answer = answer + " " + emoji
+    for c in categories:
+        if normalize(c.get("name")) == normalize(result):
+            return normalize(c.get("name"))
 
-#     return save_bot(conversation, user_msg, answer)
+    return None
+
+# -----diet
+
+def detect_diet_type(query, product=None):
+    if product:
+        return None
+
+    q = normalize(query)
+
+    if any(w in q for w in {"morning", "breakfast"}):
+        return "morning"
+
+    if any(w in q for w in {"noon", "lunch", "afternoon"}):
+        return "noon"
+
+    if any(w in q for w in {"evening", "snack"}):
+        return "evening"
+
+    if any(w in q for w in {"night", "dinner"}):
+        return "night"
+
+    if "kids" in q and "noon" in q:
+        return "kids_noon"
+
+    if "kids" in q and "night" in q:
+        return "kids_night"
+
+    if "gym" in q and "morning" in q:
+        return "gym_morning"
+
+    if "gym" in q and "noon" in q:
+        return "gym_noon"
+
+    if "gym" in q and "night" in q:
+        return "gym_night"
+
+    if any(w in q for w in {"weight", "loss", "slim"}):
+        return "weight_loss"
+
+    if any(w in q for w in {"gym", "protein", "muscle"}):
+        return "gym"
+
+    if "kids" in q:
+        return "kids"
+
+    if any(w in q for w in {"diet", "nutrition"}):
+        return "general"
+
+    return None
+
+DIET_CATEGORY_MAP = {
+    "morning": ["fruits", "dairy", "eggs"],
+    "weight_loss": ["fruits", "vegetables"],
+    "gym": ["eggs", "meat", "nuts", "dairy"],
+    "kids": ["fruits", "dairy", "eggs", "snacks"],
+    "general": ["fruits", "vegetables", "nuts"]
+}
+
+DIET_INTRO = {
+    "morning": "🥣 A healthy morning meal gives energy for the day.",
+    "weight_loss": "🥗 For weight loss, light and fiber-rich foods are recommended.",
+    "gym": "💪 For gym and muscle building, protein-rich foods help recovery.",
+    "kids": "🧒 Kids need balanced nutrition for growth and energy.",
+    "general": "🥗 A balanced diet supports overall health."
+}
+
+DIET_CATEGORY_MAP.update({
+    "noon": ["vegetables", "dairy", "meat", "eggs"],
+    "night": ["vegetables", "dairy"],
+    "kids_morning": ["fruits", "dairy", "eggs"],
+    "kids_evening": ["fruits", "snacks", "dairy"],
+    "evening": ["snacks", "fruits", "nuts"],
+    "gym_weight_loss": ["eggs", "vegetables", "nuts"]
+})
+
+DIET_INTRO.update({
+    "noon": "🍽️ A balanced noon meal keeps energy steady throughout the day.",
+    "night": "🌙 Light food at night helps digestion and improves sleep.",
+    "kids_morning": "🧒🥣 A nutritious morning meal helps kids stay active and focused.",
+    "kids_evening": "🧒🍎 Light and healthy evening snacks are best for kids.",
+    "evening": "🌇 Light evening foods help digestion and prevent overeating.",
+    "gym_weight_loss": "💪🥗 Protein-rich but low-fat foods support gym training and weight loss."
+})
+
+def is_general_health_query(query, product=None):
+    if product:
+        return False  # 🔴 IMPORTANT: product queries handled separately
+
+    q = normalize(query)
+    return any(k in q for k in {
+        "health", "healthy",
+        "nutritious", "good food"
+    })
+
+
+GENERAL_HEALTH_CATEGORIES = ["fruits", "vegetables", "nuts"]
+
+def is_product_health_benefit_query(query):
+    q = normalize(query)
+    keywords = {
+        "health benefit", "health benefits",
+        "benefits", "good for health",
+        "is it healthy", "nutrition"
+    }
+    return any(k in q for k in keywords)
+
+def extract_context(raw, product, category):
+    q = normalize(raw)
+
+    return {
+        "has_product": bool(product),
+        "has_category": bool(category),
+        "health_intent": any(w in q for w in {
+            "health", "healthy", "benefit", "benefits",
+            "nutrition", "good for"
+        }),
+        "diet_intent": any(w in q for w in {
+            "diet", "weight", "loss", "gym",
+            "kids", "breakfast", "morning"
+        }),
+    }
+
+def detect_greeting(raw):
+    raw = raw.lower()
+
+    for time_of_day, phrases in GREETINGS.items():
+        for p in phrases:
+            if p in raw:
+                return time_of_day
+
+    return None
+
+def greeting_reply(greeting_type):
+    if greeting_type == "morning":
+        return "🌅 Good morning! Hope you have a fresh and healthy day 😊"
+    if greeting_type == "afternoon":
+        return "☀️ Good afternoon! How can I help you today?"
+    if greeting_type == "evening":
+        return "🌆 Good evening! Looking for something fresh today?"
+    if greeting_type == "night":
+        return "🌙 Good night! Take care and eat healthy 🌿"
+
+    return "👋 Hello! How can I help you today?"
+
 
 def handle_chat(user, query, conversation=None, project_data=None):
-    # Create or reuse conversation
-    if conversation is None:
+
+    if not conversation:
         conversation = Conversation.objects.create(user=user)
 
-    if conversation.title == "New Chat":
-        conversation.title = query[:30] + "..." if len(query) > 30 else query
-        conversation.save()
-
-    # Save user message
     user_msg = Message.objects.create(
         conversation=conversation,
         sender="user",
         content=query
     )
 
-    raw_q = (query or "").lower()
-    clean_q = clean_query(raw_q)
+    raw = normalize(query)
+    clean = clean_query(raw)
 
-    # ==============================================================
-    # 1️⃣ CART INTENT
-    # ==============================================================
-    if project_data and is_cart_query(raw_q):
-        if user and getattr(user, "is_authenticated", False):
+    # ---------------- Greeting ----------------
+    greeting_type = detect_greeting(raw)
+    if greeting_type:
+        return save_bot(
+            conversation,
+            user_msg,
+            greeting_reply(greeting_type)
+        )
+
+    # ---------------- Meaningless input ----------------
+    if is_meaningless_input(query):
+        return save_bot(
+            conversation,
+            user_msg,
+            "🙂 Please type a product or category name, for example: apple, milk, vegetables."
+        )
+
+    products = project_data.get("products", [])
+    categories = project_data.get("categories", [])
+
+    product = match_product(clean, products)
+    category = match_category(clean, categories)
+    
+    #  CART
+
+    if is_cart_query(raw):
+        if user and user.is_authenticated:
             cart_items = user.cart_items.select_related("product")
+
             if not cart_items.exists():
-                answer = "Your cart is empty 🛒"
-            else:
-                answer = "<b>Your cart items:</b><br>"
-                for item in cart_items:
-                    prod = item.product
-                    answer += (
-                        f"• <a href='{prod.get_absolute_url()}' target='_blank'>{prod.title}</a>"
-                        f" × {item.quantity}<br>"
-                    )
+                return save_bot(conversation, user_msg, "Your cart is empty 🛒")
+
+            reply = "<b>🛒 Your cart items:</b><br>"
+            for item in cart_items:
+                reply += (
+                    f"• {item.product.title} × {item.quantity} "
+                    f"— ₹{item.product.base_price * item.quantity}<br>"
+                )
+
+            return save_bot(conversation, user_msg, reply)
+
+        return save_bot(conversation, user_msg, "Please log in to view your cart 😊")
+    
+    #  WISHLIST
+
+    if is_wishlist_query(raw):
+        if user and user.is_authenticated:
+            items = user.wishlist.all()
+
+            if not items.exists():
+                return save_bot(conversation, user_msg, "Your wishlist is empty ⭐")
+
+            reply = "<b>⭐ Your wishlist items:</b><br>"
+            for p in items:
+                reply += f"• {p.title}<br>"
+
+            return save_bot(conversation, user_msg, reply)
+
+        return save_bot(conversation, user_msg, "Please log in to view wishlist 😊")
+
+    #  OFFERS
+
+    if is_offer_query(raw):
+        if product:
+            items = get_offer_products(products, product_name=product["title"])
+        elif category:
+            items = get_offer_products(products, category=category)
         else:
-            answer = "Please log in to view your cart 😊"
-        return save_bot(conversation, user_msg, answer)
+            items = get_offer_products(products)
 
-    # ==============================================================
-    # 2️⃣ WISHLIST INTENT
-    # ==============================================================
-    if project_data and is_wishlist_query(raw_q):
-        if user and getattr(user, "is_authenticated", False):
-            wish_items = user.wishlist.all()
-            if not wish_items.exists():
-                answer = "Your wishlist is empty ⭐"
-            else:
-                answer = "<b>Your wishlist items:</b><br>"
-                for product in wish_items:
-                    answer += (
-                        f"• <a href='{product.get_absolute_url()}' target='_blank'>{product.title}</a><br>"
-                    )
+        if items:
+            reply = "<b>🔥 Available Offers:</b><br>"
+            for p in items:
+                status = (
+                    "<span style='color:red'>Out of stock ❌</span>"
+                    if p.get("stock", 0) <= 0
+                    else f"<b>Offer: ₹{p['offer_price']}</b>"
+                )
+                reply += (
+                    f"• <a href='{p.get('url','#')}' target='_blank'>{p['title']}</a><br>"
+                    f"MRP: ₹{p['base_price']} | {status} ({p['discount_percent']}% OFF)<br><br>"
+                )
+            return save_bot(conversation, user_msg, reply)
+
+        return save_bot(conversation, user_msg, "Currently there are no active offers 😔")
+    
+    # PRODUCT HEALTH BENEFITS
+
+    if product and is_product_health_benefit_query(raw):
+        benefit = product_benefit(product["title"])
+        reply = (
+            f"<b>🌿 Health benefits of "
+            f"<a href='{product.get('url','#')}' target='_blank'>"
+            f"{product['title']}</a>:</b><br>"
+            f"{benefit}<br><br>"
+            f"Price: ₹{product['base_price']}"
+        )
+        return save_bot(conversation, user_msg, reply)
+
+    #  PRODUCT AVAILABILITY
+
+    if product and is_availability_query(raw):
+        if product.get("stock", 0) > 0:
+            return save_bot(
+                conversation,
+                user_msg,
+                f"✅ <b>{product['title']}</b> is available in stock.<br>"
+                f"Price: ₹{product['base_price']}"
+            )
         else:
-            answer = "Please log in to view your wishlist 😊"
-        return save_bot(conversation, user_msg, answer)
+            return save_bot(
+                conversation,
+                user_msg,
+                f"❌ <b>{product['title']}</b> is currently out of stock."
+            )
 
-    # ==============================================================
-    # 3️⃣ MATCH PRODUCTS (SMART MATCH)
-    # ==============================================================
-    matched_products = smart_match_products(clean_q, project_data) if project_data else []
+    #  PRODUCT DETAILS
 
-    # ==============================================================
-    # 4️⃣ IF NO PRODUCT MATCH & ALSO NOT GROCERY CONTEXT → AI ANSWER
-    # ==============================================================
+    if product:
+        price_text = (
+            "<span style='color:red'>Out of stock ❌</span>"
+            if product.get("stock", 0) <= 0
+            else f"₹{product['base_price']}"
+        )
 
-    if project_data and not matched_products and not is_grocery_context(raw_q):
-        raw_answer = hf_generate(query)
-        category = classify_query_ai(query)
-        answer = format_short_reply(raw_answer, query, category)
-        emoji = auto_emoji(query)
-        answer = answer + " " + emoji
-        return save_bot(conversation, user_msg, answer)
+        benefit = product_benefit(product["title"]) or (
+        "Rich in nutrients and good for daily health."
+        )
+        image_url = product.get("image")  # DB image
 
-    # ==============================================================
-    # 5️⃣ IF NO MATCH BUT GROCERY CONTEXT → GUESS CATEGORY USING AI
-    # ==============================================================
+        reply = (
+            f"<b><a href='{product.get('url','#')}' target='_blank'>"
+            f"{product['title']}</a></b><br>"
+        )
 
-    if project_data and not matched_products and is_grocery_context(raw_q):
-        ai_cat = ai_guess_category(clean_q)
+        if image_url:
+            reply += (
+            f"<img src='{image_url}' "
+            f"style='width:120px;border-radius:8px;margin:6px 0;'><br>"
+        )
+            
+        reply += f"Price: {price_text}<br>🌿 {benefit}"
+    
+        return save_bot(conversation, user_msg, reply)
+    
+    # CATEGORY
 
-        if ai_cat:
-            similar = [
-                p for p in project_data.get("products", [])
-                if ai_cat in (p.get("category") or "")
-            ]
-
-            if similar:
-                answer = (
-                    f"We don’t currently sell <b>{query}</b>, "
-                    f"but here are similar <b>{ai_cat.title()}</b> items:<br><br>"
+    if category:
+        items = related_products(category, products)
+        if items:
+            reply = f"<b>{category.title()} items available:</b><br>"
+            for p in items:
+                status = (
+                    "<span style='color:red'>Out of stock ❌</span>"
+                    if p.get("stock", 0) <= 0
+                    else f"₹{p['base_price']}"
+                )
+                reply += (
+                    f"• <a href='{p.get('url','#')}' target='_blank'>"
+                    f"{p['title']}</a> — {status}<br>"
                 )
 
-                for p in similar[:8]:
-                    answer += (
-                        f"• <a href='{p['url']}' target='_blank'>{p['title']}</a>"
-                        f" — ₹{p['base_price']}<br>"
+            category_url = get_category_url(category, categories)
+            if category_url and category_url != "#":
+                reply += (
+                    f"<br><a href='{category_url}' target='_blank'>"
+                    f"View all {category.title()} items →</a>"
+                )
+
+            return save_bot(conversation, user_msg, reply)
+
+    # DIET / NUTRITION
+
+    diet_type = detect_diet_type(raw, product)
+    if diet_type:
+        allowed_categories = DIET_CATEGORY_MAP.get(diet_type, [])
+        intro = DIET_INTRO.get(diet_type, "")
+        suggested_products = [
+            p for p in products
+            if p.get("category") in allowed_categories and p.get("stock", 0) > 0
+        ][:6]
+
+        if suggested_products:
+            reply = f"<b>{intro}</b><br><br>"
+            for p in suggested_products:
+                reply += (
+                    f"• <a href='{p.get('url','#')}' target='_blank'>"
+                    f"{p['title']}</a> — ₹{p['base_price']}<br>"
+                )
+            return save_bot(conversation, user_msg, reply)
+
+    #  GENERAL HEALTH
+
+    if is_general_health_query(raw, product):
+        suggested_products = [
+            p for p in products
+            if p.get("category") in GENERAL_HEALTH_CATEGORIES and p.get("stock", 0) > 0
+        ][:6]
+
+        if suggested_products:
+            reply = "<b>🥗 Foods that are good for health:</b><br><br>"
+            for p in suggested_products:
+                reply += (
+                    f"• <a href='{p.get('url','#')}' target='_blank'>"
+                    f"{p['title']}</a> — ₹{p['base_price']}<br>"
+                )
+            reply += (
+                "<br><small>Tip: A balanced diet with fruits and vegetables "
+                "helps maintain good health.</small>"
+            )
+            return save_bot(conversation, user_msg, reply)
+
+    #  PRODUCT NOT FOUND → CATEGORY FALLBACK
+
+    if not product and not category and looks_like_grocery_word(query):
+
+        guessed_category = infer_category_for_missing_product(query, products)
+
+        if not guessed_category:
+            guessed_category = ai_guess_category(query, categories)
+
+        if guessed_category:
+            items = related_products(guessed_category, products)
+            if items:
+                reply = (
+                    f"Sorry, we don’t have <b>{query}</b> right now ❌<br><br>"
+                    f"<b>Available {guessed_category.title()} items:</b><br>"
+                )
+                for p in items:
+                    reply += (
+                        f"• <a href='{p.get('url','#')}' target='_blank'>"
+                        f"{p['title']}</a> — ₹{p['base_price']}<br>"
                     )
 
-                if ai_cat in CATEGORY_BENEFITS:
-                    answer += f"<br>🌿 <b>Benefits:</b> {CATEGORY_BENEFITS[ai_cat]}"
+                category_url = get_category_url(guessed_category, categories)
+                if category_url and category_url != "#":
+                    reply += (
+                        f"<br><a href='{category_url}' target='_blank'>"
+                        f"View all {guessed_category.title()} items →</a>"
+                    )
 
-                return save_bot(conversation, user_msg, answer)
+                return save_bot(conversation, user_msg, reply)
+            
+    # ORDER / PAYMENT / TRACKING (RESTORED)
 
-    # ==============================================================
-    # 6️⃣ BUILD MATCHED OFFERS
-    # ==============================================================
+    if is_tracking_query(raw) or is_payment_query(raw) or "order" in raw:
 
-    offers_list = project_data.get("offers", []) if project_data else []
-    matched_offers = [
-        o for o in offers_list
-        if any(
-            (o.get("title_lower") or "").lower() == (p.get("title_lower") or "").lower()
-            for p in matched_products
-        )
-    ]
+        if not user or not user.is_authenticated:
+            return save_bot(
+                conversation,
+                user_msg,
+                "Please log in to view order details 🔐"
+            )
 
-    # ==============================================================
-    # 7️⃣ PRICE QUERY
-    # ==============================================================
+        order_id = extract_order_id(raw)
 
-    if project_data and "price" in raw_q and matched_products:
-        main = matched_products[0]
-        benefit_text = None
-
-        pname = (main.get("title") or "").lower()
-
-        # product benefit
-        benefit_text = PRODUCT_BENEFITS.get(pname)
-
-        # category benefit
-        if not benefit_text:
-            cat = (main.get("category") or "").lower()
-            benefit_text = CATEGORY_BENEFITS.get(cat)
-
-        # AI fallback
-        if not benefit_text:
-            benefit_text = generate_ai_benefits(main.get("title"))
-
-        answer = (
-            f"The price of <b>{main.get('title')}</b> is ₹{main.get('base_price')}."
-            f"<br>🛒 <a href='{main.get('url')}' target='_blank'>View Product</a>"
-        )
-
-        answer += f"<br><br>🌿 <b>Benefits:</b> {benefit_text}"
-
-        # related products
-        related = [
-            p for p in matched_products[1:10]
-            if p.get("category") == main.get("category")
-        ]
-
-        if related:
-            answer += "<br><br><b>You may also like:</b><br>"
-            for p in related:
-                answer += (
-                    f"• <a href='{p['url']}' target='_blank'>{p['title']}</a>"
-                    f" — ₹{p['base_price']}<br>"
+        if order_id:
+            o = Order.objects.filter(user=user, id=order_id).first()
+            if not o:
+                return save_bot(
+                    conversation,
+                    user_msg,
+                    f"No order found with ID {order_id} ❌"
+                )
+        else:
+            o = Order.objects.filter(user=user).order_by("-created_at").first()
+            if not o:
+                return save_bot(
+                    conversation,
+                    user_msg,
+                    "You don’t have any orders yet 📦"
                 )
 
-        return save_bot(conversation, user_msg, answer)
-
-    # ==============================================================
-    # 8️⃣ OFFER QUERY
-    # ==============================================================
-
-    if project_data and ("offer" in raw_q or "discount" in raw_q or is_offer_query(raw_q)):
-
-        # specific product offers
-        if matched_offers:
-            answer = "<b>Available Offers:</b><br>"
-            for o in matched_offers:
-                answer += (
-                    f"• <a href='{o['url']}' target='_blank'>{o['title']}</a>"
-                    f" — {o['discount_percent']}% off<br>"
-                )
-            return save_bot(conversation, user_msg, answer)
-
-        # fallback: show all offers
-        if offers_list:
-            answer = "<b>Latest Offers:</b><br>"
-            for o in offers_list:
-                answer += (
-                    f"• <a href='{o['url']}' target='_blank'>{o['title']}</a>"
-                    f" — {o['discount_percent']}% off<br>"
-                )
-            return save_bot(conversation, user_msg, answer)
-
-        return save_bot(conversation, user_msg, "No offers available right now 😊")
-
-    # ==============================================================
-    # 9️⃣ BENEFITS QUERY
-    # ==============================================================
-
-    if project_data and any(k in raw_q for k in ["benefit", "benefits", "uses", "healthy", "good for"]):
-        if matched_products:
-            main = matched_products[0]
-            pname = (main.get("title") or "").lower()
-            cat = (main.get("category") or "").lower()
-
-            benefit = PRODUCT_BENEFITS.get(pname) or CATEGORY_BENEFITS.get(cat)
-
-            if not benefit:
-                benefit = generate_ai_benefits(main.get("title"))
-
-            answer = f"<b>{main.get('title')}</b><br>🌿 {benefit}"
-
-            return save_bot(conversation, user_msg, answer)
-
-    # ==============================================================
-    # 🔟 PRODUCT MATCH (GENERAL)
-    # ==============================================================
-
-    if project_data and matched_products:
-        main = matched_products[0]
-
-        pname = (main.get("title") or "").lower()
-        cat = (main.get("category") or "").lower()
-
-        benefit = PRODUCT_BENEFITS.get(pname) or CATEGORY_BENEFITS.get(cat)
-
-        if not benefit:
-            benefit = generate_ai_benefits(main.get("title"))
-
-        answer = (
-            f"<b>{main.get('title')}</b> — ₹{main.get('base_price')}<br>"
-            f"🛒 <a href='{main.get('url')}' target='_blank'>View Product</a><br><br>"
-            f"🌿 {benefit}<br><br>"
+        reply = (
+            "<b>📦 Order Details</b><br>"
+            f"Order ID: {o.id}<br>"
+            f"Status: {o.status}<br>"
+            f"Amount: ₹{o.total_amount}<br>"
         )
 
-        # related items
-        related = [
-            p for p in matched_products[1:10]
-            if p.get("category") == main.get("category")
-        ]
+        if o.razorpay_payment_id:
+            reply += f"Payment ID: {o.razorpay_payment_id}<br>"
 
-        if related:
-            answer += "<b>You may also like:</b><br>"
-            for p in related:
-                answer += (
-                    f"• <a href='{p['url']}' target='_blank'>{p['title']}</a>"
-                    f" — ₹{p['base_price']}<br>"
-                )
+        if o.expected_delivery_time:
+            reply += f"Expected Delivery: {o.expected_delivery_time}<br>"
 
-        return save_bot(conversation, user_msg, answer)
+        return save_bot(conversation, user_msg, reply)
 
-
-    raw_answer = hf_generate(query)
-    category = classify_query_ai(query)
-    answer = format_short_reply(raw_answer, query, category)
-    answer += " " + auto_emoji(query)
-
-    return save_bot(conversation, user_msg, answer)
+    #  FALLBACK
+    return save_bot(
+        conversation,
+        user_msg,
+        "👋 I’m your shopping assistant! "
+        "Try asking: product price, today’s offers, my cart, or order status."
+    )

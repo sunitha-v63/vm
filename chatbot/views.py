@@ -148,7 +148,6 @@ def restore_conversation(request, cid):
 
     return JsonResponse({"restored": True})
 
-
 @csrf_exempt
 def rename_conversation(request, cid):
     data = json.loads(request.body)
@@ -174,7 +173,6 @@ def pin_conversation(request, cid):
         return JsonResponse({"pinned": conv.pinned})
     except Conversation.DoesNotExist:
         return JsonResponse({"error": "Not found"}, status=404)
-
 
 @csrf_exempt
 def upload_file(request):
@@ -249,3 +247,62 @@ def delete_message(request, mid):
         return JsonResponse({"deleted": True})
     except Message.DoesNotExist:
         return JsonResponse({"error": "Message not found"}, status=404)
+
+# import time
+# import requests
+
+
+# @csrf_exempt
+# def generate_image_view(request):
+#     if request.method != "POST":
+#         return JsonResponse({"error": "POST request required"}, status=400)
+
+#     prompt = request.POST.get("prompt")
+#     if not prompt:
+#         return JsonResponse({"error": "Prompt is required"}, status=400)
+
+#     API_URL = "https://router.huggingface.co/hf-inference/models/runwayml/stable-diffusion-v1-5"
+
+#     headers = {
+#         "Authorization": f"Bearer {settings.HF_API_KEY}",
+#         "Accept": "image/png",
+#         "Content-Type": "application/json",
+#     }
+
+#     response = requests.post(
+#         API_URL,
+#         headers=headers,
+#         json={"inputs": prompt},
+#         timeout=60
+#     )
+
+#     print("HF STATUS:", response.status_code)
+#     print("HF RESPONSE:", response.text[:300])
+
+#     # Hugging Face error
+#     if response.status_code != 200:
+#         return JsonResponse({
+#             "error": "Hugging Face image generation failed",
+#             "hf_status": response.status_code,
+#             "hf_message": response.text
+#         }, status=502)
+
+#     # Ensure image response
+#     if "image" not in response.headers.get("content-type", ""):
+#         return JsonResponse({
+#             "error": "Hugging Face did not return an image",
+#             "hf_response": response.text
+#         }, status=502)
+
+#     filename = f"generated_{int(time.time())}.png"
+#     save_dir = settings.MEDIA_ROOT / "chat_images"
+#     save_dir.mkdir(parents=True, exist_ok=True)
+
+#     file_path = save_dir / filename
+#     with open(file_path, "wb") as f:
+#         f.write(response.content)
+
+#     return JsonResponse({
+#         "message": "Image generated successfully",
+#         "image_url": f"{settings.MEDIA_URL}chat_images/{filename}"
+#     })

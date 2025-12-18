@@ -27,6 +27,8 @@ urlpatterns = [
     path("pin/<int:cid>/", views.pin_conversation, name="pin_conversation"),
     path("upload-file/", views.upload_file, name="upload_file"),
     path("delete-message/<int:mid>/", views.delete_message, name="delete_message"),
+    
+    # path("image/generate/", views.generate_image_view, name="generate_image")
 ]
 
 
