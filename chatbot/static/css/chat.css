@@ -377,9 +377,6 @@
     }
 }
 
-/* =========================
-   MOBILE CHAT HEADER FIX
-   ========================= */
 @media (max-width: 600px) {
   .pro-chat-header {
     display: flex;
